@@ -30,4 +30,4 @@
 pub mod info;
 mod configuration;
 mod client;
-mod security;
+pub mod security;

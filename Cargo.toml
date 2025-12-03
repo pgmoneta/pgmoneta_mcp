@@ -37,9 +37,9 @@ tracing-subscriber = { version = "0.3", features = [
 axum = { version = "0.8", features = ["macros"] }
 config = { version = "0.15", features = ["yaml"] }
 base64 = "0.22.1"
-pgwire = "0.35.0"
 home = "0.5.11"
 scrypt = "0.11.0"
 rand = "0.9.1"
 aes-gcm = "0.10.3"
 zeroize = "1.8.2"
+scram = "0.6.0"
