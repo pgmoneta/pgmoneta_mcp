@@ -28,6 +28,6 @@
 // pub mod backup;
 // pub mod restore;
 pub mod info;
-mod configuration;
+pub mod configuration;
 mod client;
 pub mod security;

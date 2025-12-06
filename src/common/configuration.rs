@@ -24,17 +24,39 @@
 // TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use anyhow::anyhow;
 use std::collections::HashMap;
+use config::Config;
+use serde::Deserialize;
+use once_cell::sync::OnceCell;
 
-#[derive(Clone, Debug)]
+pub static CONFIG: OnceCell<Configuration> = OnceCell::new();
+
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Configuration {
     pub pgmoneta: Pgmoneta,
+    #[serde(default = "default_port")]
     pub port: i32,
     pub admins: HashMap<String, String> //username -> password
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Pgmoneta {
     pub host: String,
     pub port: i32
+}
+
+pub fn load_configuration(config_path: &str, user_path: &str) -> anyhow::Result<Configuration> {
+    let conf = Config::builder()
+        .add_source(config::File::with_name(config_path))
+        .add_source(config::File::with_name(user_path))
+        .build()?;
+    conf.try_deserialize::<Configuration>().map_err(|e| {
+        anyhow!("Error deserializing configuration at path {}, user {}: {:?}", config_path, user_path, e)
+    })
+}
+
+fn default_port() -> i32 {
+    8000
 }

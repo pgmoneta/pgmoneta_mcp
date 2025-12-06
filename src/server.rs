@@ -27,12 +27,35 @@ use rmcp::transport::streamable_http_server::{
     StreamableHttpService, session::local::LocalSessionManager,
 };
 use tracing_subscriber::{self, EnvFilter};
+use clap::Parser;
 mod common;
 use common::info::Info;
+use common::configuration;
 
-const BIND_ADDRESS: &str = "0.0.0.0:8000";
+const BIND_ADDRESS: &str = "0.0.0.0";
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "pgmoneta-mcp",
+    about = "Start an MCP server for Pgmoneta, backup/restore tool for Postgres"
+)]
+struct Args {
+    /// Path to pgmoneta users configuration file
+    #[arg(short, long, default_value = "/etc/pgmoneta_mcp/pgmoneta_mcp_users.toml")]
+    users: String,
+
+    /// Path to pgmoneta MCP configuration file
+    #[arg(short, long, default_value = "/etc/pgmoneta_mcp/pgmoneta_mcp.toml")]
+    conf: String,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+    let config = configuration::load_configuration(&args.conf, &args.users)?;
+    let address = format!("{BIND_ADDRESS}:{}", &config.port);
+    configuration::CONFIG.set(config).expect("CONFIG already initialized");
+    
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::DEBUG.into()))
         .with_writer(std::io::stderr)
@@ -46,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     
     let router = axum::Router::new()
         .nest_service("/info", info_service);
-    let tcp_listener = tokio::net::TcpListener::bind(BIND_ADDRESS).await?;
+    let tcp_listener = tokio::net::TcpListener::bind(address).await?;
     let _ = axum::serve(tcp_listener, router)
         .with_graceful_shutdown(async { tokio::signal::ctrl_c().await.unwrap() })
         .await;
