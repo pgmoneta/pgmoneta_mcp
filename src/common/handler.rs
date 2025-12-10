@@ -16,7 +16,7 @@
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler,
     handler::server::{
-        router::{prompt::PromptRouter, tool::ToolRouter},
+        router::{tool::ToolRouter},
         wrapper::Parameters,
     },
     model::*,
@@ -24,36 +24,52 @@ use rmcp::{
     service::RequestContext,
     tool, tool_handler, tool_router,
 };
-use serde_json::json;
 
-#[derive(Clone)]
-pub struct Info {
-    tool_router: ToolRouter<Info>,
-    prompt_router: PromptRouter<Info>,
-}
+use super::client;
+
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct InfoRequest {
     pub server: String,
     pub backup_id: String,
 }
 
+#[derive(Clone)]
+pub struct PgmonetaHandler {
+    tool_router: ToolRouter<PgmonetaHandler>,
+}
+
 #[tool_router]
-impl Info {
+impl PgmonetaHandler {
     pub fn new() -> Self {
         Self {
             tool_router: Self::tool_router(),
-            prompt_router: Self::prompt_router(),
         }
     }
 }
 
-#[prompt_router]
-impl Info {
-    
-}
-
 #[tool_handler]
-#[prompt_handler]
-impl ServerHandler for Info {
+impl ServerHandler for PgmonetaHandler {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            protocol_version: ProtocolVersion::V_2024_11_05,
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .build(),
+            server_info: Implementation::from_build_env(),
+            instructions: Some("This server provides capabilities to interact with pgmoneta, a backup/restore tool for PostgreSQL.".to_string()),
+        }
+    }
 
+    async fn initialize(
+        &self,
+        _request: InitializeRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> Result<InitializeResult, McpError> {
+        if let Some(http_request_part) = context.extensions.get::<axum::http::request::Parts>() {
+            let initialize_headers = &http_request_part.headers;
+            let initialize_uri = &http_request_part.uri;
+            tracing::info!(?initialize_headers, %initialize_uri, "initialize from http server");
+        }
+        Ok(self.get_info())
+    }
 }

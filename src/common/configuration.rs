@@ -33,7 +33,8 @@ pub struct Configuration {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Pgmoneta {
     pub host: String,
-    pub port: i32
+    pub port: i32,
+    pub version: String,
 }
 
 pub fn load_configuration(config_path: &str, user_path: &str) -> anyhow::Result<Configuration> {

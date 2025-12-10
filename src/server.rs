@@ -19,7 +19,7 @@ use rmcp::transport::streamable_http_server::{
 use tracing_subscriber::{self, EnvFilter};
 use clap::Parser;
 mod common;
-use common::info::Info;
+use common::handler::PgmonetaHandler;
 use common::configuration;
 
 const BIND_ADDRESS: &str = "0.0.0.0";
@@ -52,13 +52,13 @@ async fn main() -> anyhow::Result<()> {
         .with_ansi(false)
         .init();
     let info_service = StreamableHttpService::new(
-        || Ok(Info::new()),
+        || Ok(PgmonetaHandler::new()),
         LocalSessionManager::default().into(),
         Default::default()
     );
     
     let router = axum::Router::new()
-        .nest_service("/info", info_service);
+        .nest_service("/mcp", info_service);
     let tcp_listener = tokio::net::TcpListener::bind(address).await?;
     let _ = axum::serve(tcp_listener, router)
         .with_graceful_shutdown(async { tokio::signal::ctrl_c().await.unwrap() })
