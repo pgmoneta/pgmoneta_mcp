@@ -95,6 +95,13 @@ impl SecurityUtil {
 }
 
 impl SecurityUtil {
+    const KEY_USER: &'static str = "user";
+    const KEY_DATABASE: &'static str = "database";
+    const KEY_APP_NAME: &'static str = "application_name";
+    const APP_PGMONETA: &'static str = "pgmoneta";
+    const DB_ADMIN: &'static str = "admin";
+    const MAGIC: i32 = 196608;
+    const HEADER_OFFSET: usize = 9;
     fn derive_key(master_key: &[u8], salt: &[u8]) -> [u8; 32] {
         let params = Params::recommended();
         let mut derived_key = [0u8; 32];
@@ -139,20 +146,73 @@ impl SecurityUtil {
         let scram = ScramClient::new(username, password, None);
         let address = format!("{}:{}", host, port);
         let mut stream = TcpStream::connect(address).await?;
+
+        let startup_msg = Self::create_startup_message(username).await?;
+        stream.write_all(startup_msg.as_slice()).await?;
+
+        let mut startup_resp = [0u8; 256];
+        let n = stream.read(&mut startup_resp).await?;
+        if n == 0 || startup_resp[0] != b'R' {
+            return Err(anyhow!("Getting invalid startup response from server {:?}", startup_resp))
+        }
+
         let (scram, client_first) = scram.client_first();
-        stream.write_all(client_first.as_bytes()).await?;
+        let mut client_first_msg = Vec::new();
+        let size = 1 + 4 + 13 + 4 + 1 + client_first.len();
+        client_first_msg.write_u8(b'p').await?;
+        client_first_msg.write_i32(size as i32).await?;
+        client_first_msg.write("SCRAM-SHA-256".as_bytes()).await?;
+        client_first_msg.write("\0\0\0\0 ".as_bytes()).await?;
+        client_first_msg.write(client_first.as_bytes()).await?;
+        stream.write_all(client_first_msg.as_slice()).await?;
 
-        let mut server_first = String::new();
-        stream.read_to_string(&mut server_first).await?;
-        let scram = scram.handle_server_first(&server_first)?;
-
+        let mut server_first = [0u8; 256];
+        let n = stream.read(&mut server_first).await?;
+        if n == 0 || server_first[0] != b'R' {
+            return Err(anyhow!("Getting invalid server first message {:?}", server_first))
+        }
+        let server_first_str = String::from_utf8(Vec::from(&server_first[Self::HEADER_OFFSET..n]))?;
+        let scram = scram.handle_server_first(&server_first_str)?;
+        
         let (scram, client_final) = scram.client_final();
-        stream.write_all(client_final.as_bytes()).await?;
+        let mut client_final_msg = Vec::new();
+        let size = 1 + 4 + client_final.len();
+        client_final_msg.write_u8(b'p').await?;
+        client_final_msg.write_i32(size as i32).await?;
+        client_final_msg.write(client_final.as_bytes()).await?;
+        stream.write_all(client_final_msg.as_slice()).await?;
 
-        let mut server_final = String::new();
-        stream.read_to_string(&mut server_final).await?;
-        scram.handle_server_final(&server_final)?;
+        let mut server_final = [0u8; 256];
+        let n = stream.read(&mut server_final).await?;
+        if n == 0 || server_final[0] != b'R' {
+            return Err(anyhow!("Getting invalid server final message {:?}", server_first))
+        }
+        let server_final_str = String::from_utf8(Vec::from(&server_final[Self::HEADER_OFFSET..n]))?;
+        scram.handle_server_final(&server_final_str)?;
         Ok(stream)
+    }
+
+    async fn create_startup_message(username: &str) -> anyhow::Result<Vec<u8>> {
+        let mut msg = Vec::new();
+        let us = username.len();
+        let ds = Self::DB_ADMIN.len();
+        let size = 4 + 4 + 4 + 1 + us + 1 + 8 + 1 + ds + 1 + 17 + 9 + 1;
+        msg.write_i32(size as i32).await?;
+        msg.write_i32(Self::MAGIC).await?;
+        msg.write(Self::KEY_USER.as_bytes()).await?;
+        msg.write_u8(b'\0').await?;
+        msg.write(username.as_bytes()).await?;
+        msg.write_u8(b'\0').await?;
+        msg.write(Self::KEY_DATABASE.as_bytes()).await?;
+        msg.write_u8(b'\0').await?;
+        msg.write(Self::DB_ADMIN.as_bytes()).await?;
+        msg.write_u8(b'\0').await?;
+        msg.write(Self::KEY_APP_NAME.as_bytes()).await?;
+        msg.write_u8(b'\0').await?;
+        msg.write(Self::APP_PGMONETA.as_bytes()).await?;
+        msg.write_u8(b'\0').await?;
+        msg.write_u8(b'\0').await?;
+        Ok(msg)
     }
 }
 
