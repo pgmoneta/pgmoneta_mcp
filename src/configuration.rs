@@ -18,7 +18,6 @@ use std::collections::HashMap;
 use config::Config;
 use serde::{Deserialize, Serialize};
 use once_cell::sync::OnceCell;
-use rmcp::model::Role::User;
 
 pub static CONFIG: OnceCell<Configuration> = OnceCell::new();
 pub type UserConf = HashMap<String, HashMap<String, String>>;

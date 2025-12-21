@@ -23,7 +23,6 @@ use rmcp::{
         wrapper::Parameters,
     },
     model::*,
-    schemars,
     service::RequestContext,
     tool, tool_handler, tool_router,
 };
