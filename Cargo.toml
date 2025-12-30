@@ -3,6 +3,8 @@ name = "pgmoneta-mcp"
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
+authors = ["Haoran Zhang <andrewzhr9911@gmail.com>", "Jesper Pedersen <jesperpedersen.db@gmail.com>"]
+description = "MCP server for pgmoneta"
 
 [[bin]]
 name = "pgmoneta-mcp-server"
