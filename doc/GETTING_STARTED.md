@@ -78,7 +78,7 @@ You need to have GitHub Copilot extension installed in VS code.
 
 **Add your server**
 
-Open the Command Palette in VS Code, type "MCP: Add Server" to configure your server in VS code.
+Open the Command Palette in VS Code (F1), type "MCP: Add Server" to configure your server in VS Code.
 
 Note that if your server is running remotely, you may need to configure firewall and/or network inbound rules
 to open the corresponding port, or alternatively, use SSH tunneling.
@@ -86,10 +86,31 @@ to open the corresponding port, or alternatively, use SSH tunneling.
 **Start your server**
 
 At the extension tab, you will see the installed MCP servers. Choose the pgmoneta MCP server you just added,
-click the gear icon, choose "Start Server". This will let VS code to try connecting with your MCP server and
+click the gear icon, choose "Start Server". This will let VS Code to try connecting with your MCP server and
 discover available tool.
 
 **Use your MCP server**
 
 Open a chat (shortcut: Ctrl + Alt + I). Try asking your model to ask the server to say hello, or query
 your latest backup info!
+
+## Closing
+
+The [pgmoneta-mcp](https://github.com/pgmoneta/pgmoneta_mcp) community hopes that you find
+the project interesting.
+
+Feel free to
+
+* [Ask a question](https://github.com/pgmoneta/pgmoneta_mcp/discussions)
+* [Raise an issue](https://github.com/pgmoneta/pgmoneta_mcp/issues)
+* [Submit a feature request](https://github.com/pgmoneta/pgmoneta_mcp/issues)
+* [Write a code submission](https://github.com/pgmoneta/pgmoneta_mcp/pulls)
+
+All contributions are most welcome !
+
+Please, consult our [Code of Conduct](../CODE_OF_CONDUCT.md) policies for interacting in our
+community.
+
+Consider giving the project a [star](https://github.com/pgmoneta/pgmoneta_mcp/stargazers) on
+[GitHub](https://github.com/pgmoneta/pgmoneta_mcp/) if you find it useful. And, feel free to follow
+the project on [X](https://x.com/pgmoneta/) as well.
