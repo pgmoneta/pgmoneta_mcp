@@ -37,10 +37,10 @@ enum Commands {
         #[command(subcommand)]
         action: UserAction,
         /// The admin user
-        #[arg(short = 'U', long)]
+        #[arg(short = 'u', long)]
         user: String,
         /// The admin user password
-        #[arg(short = 'P', long)]
+        #[arg(short = 'p', long)]
         password: String,
         /// The user configuration file
         #[arg(short = 'f', long)]

@@ -9,7 +9,7 @@ you need to run pgmoneta in remote admin mode, with yourself added to the users 
 
 First, add yourself to users if you haven't done that already.
 ```
-pgmoneta-admin -U <your_user_id> -P <your_password> -f <your_user_conf_file> user add
+pgmoneta-admin -u <your_user_id> -p <your_password> -f <your_user_conf_file> user add
 ```
 
 Second, run pgmoneta in remote admin mode with management port configured.
@@ -33,7 +33,7 @@ This will prompt you to input your master key.
 Add the same user and password you added to pgmoneta server to pgmoneta MCP server, creating or updating
 your user configuration toml file.
 ```
-pgmoneta-mcp-admin user -U <your_user_id> -P <your_password> -f <your_mcp_user_conf.conf> add
+pgmoneta-mcp-admin user -u <your_user_id> -p <your_password> -f <your_mcp_user_conf.conf> add
 ```
 
 ## Configure pgmoneta MCP server
