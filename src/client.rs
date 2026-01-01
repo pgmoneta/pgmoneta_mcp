@@ -96,7 +96,7 @@ impl PgmonetaClient {
     async fn write_request(request_str: &str, stream: &mut TcpStream) -> anyhow::Result<()> {
         let mut request_buf = Vec::new();
         request_buf.write_i32(request_str.len() as i32).await?;
-        request_buf.write(request_str.as_bytes()).await?;
+        request_buf.write_all(request_str.as_bytes()).await?;
 
         stream.write_u8(Compression::NONE).await?;
         stream.write_u8(Encryption::NONE).await?;

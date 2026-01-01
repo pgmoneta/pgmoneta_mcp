@@ -28,10 +28,11 @@ use scrypt::{Params, scrypt};
 use std::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 const NONCE_LEN: usize = 12;
 const SALT_LEN: usize = 16;
+const MAX_CIPHERTEXT_B64_LEN: usize = 1024 * 1024;
 
 pub struct SecurityUtil {
     base64_engine: engine::GeneralPurpose,
@@ -52,28 +53,52 @@ impl SecurityUtil {
         Ok(self.base64_engine.decode(text)?)
     }
 
-    pub fn load_master_key(&self) -> anyhow::Result<Vec<u8>> {
-        let home_path = home_dir();
-        if home_path.is_none() {
-            return Err(anyhow!("Unable to find home path"));
+    pub fn load_master_key(&self) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+        let home_path = home_dir().ok_or_else(|| anyhow!("Unable to find home path"))?;
+        let key_path = home_path.join(MASTER_KEY_PATH);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&key_path)?.permissions().mode() & 0o777;
+            if (mode & 0o077) != 0 {
+                fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))?;
+            }
         }
-        let key_path = home_path.unwrap().join(MASTER_KEY_PATH);
+
         let key = fs::read_to_string(key_path)?;
-        self.base64_decode(&key)
+        Ok(Zeroizing::new(self.base64_decode(key.trim())?))
     }
 
     pub fn write_master_key(&self, key: &str) -> anyhow::Result<()> {
-        let home_path = home_dir();
-        if home_path.is_none() {
-            return Err(anyhow!("Unable to find home path"));
-        }
-        let key_path = home_path.unwrap().join(MASTER_KEY_PATH);
+        let home_path = home_dir().ok_or_else(|| anyhow!("Unable to find home path"))?;
+        let key_path = home_path.join(MASTER_KEY_PATH);
         let key_encoded = self.base64_encode(key.as_bytes())?;
         if let Some(parent) = key_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(key_path, &key_encoded)?;
-        Ok(())
+
+        #[cfg(unix)]
+        {
+            use std::io::Write;
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&key_path)?;
+            file.write_all(key_encoded.as_bytes())?;
+            fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))?;
+            Ok(())
+        }
+
+        #[cfg(not(unix))]
+        {
+            fs::write(key_path, &key_encoded)?;
+            Ok(())
+        }
     }
 
     pub fn encrypt_to_base64_string(
@@ -95,6 +120,9 @@ impl SecurityUtil {
         cipher_text: &str,
         master_key: &[u8],
     ) -> anyhow::Result<Vec<u8>> {
+        if cipher_text.len() > MAX_CIPHERTEXT_B64_LEN {
+            return Err(anyhow!("Cipher text is too large"));
+        }
         let cipher_text_bytes = self.base64_decode(cipher_text)?;
         if cipher_text_bytes.len() < SALT_LEN + NONCE_LEN {
             return Err(anyhow!("Not enough bytes to decrypt the text"));
@@ -118,11 +146,41 @@ impl SecurityUtil {
     const DB_ADMIN: &'static str = "admin";
     const MAGIC: i32 = 196608;
     const HEADER_OFFSET: usize = 9;
-    fn derive_key(master_key: &[u8], salt: &[u8]) -> [u8; 32] {
+
+    const AUTH_OK: i32 = 0;
+    const AUTH_SASL: i32 = 10;
+    const AUTH_SASL_CONTINUE: i32 = 11;
+    const AUTH_SASL_FINAL: i32 = 12;
+
+    const MAX_PG_MESSAGE_LEN: usize = 64 * 1024;
+
+    async fn read_message(stream: &mut TcpStream) -> anyhow::Result<Vec<u8>> {
+        let mut msg_type = [0u8; 1];
+        stream.read_exact(&mut msg_type).await?;
+
+        let mut len_bytes = [0u8; 4];
+        stream.read_exact(&mut len_bytes).await?;
+
+        let len = u32::from_be_bytes(len_bytes) as usize;
+        if !(4..=Self::MAX_PG_MESSAGE_LEN).contains(&len) {
+            return Err(anyhow!("Invalid message length {}", len));
+        }
+
+        let mut rest = vec![0u8; len - 4];
+        stream.read_exact(&mut rest).await?;
+
+        let mut msg = Vec::with_capacity(1 + 4 + rest.len());
+        msg.push(msg_type[0]);
+        msg.extend_from_slice(&len_bytes);
+        msg.extend_from_slice(&rest);
+        Ok(msg)
+    }
+    fn derive_key(master_key: &[u8], salt: &[u8]) -> anyhow::Result<[u8; 32]> {
         let params = Params::recommended();
         let mut derived_key = [0u8; 32];
-        scrypt(master_key, salt, &params, &mut derived_key).expect("scrypt should not fail");
-        derived_key
+        scrypt(master_key, salt, &params, &mut derived_key)
+            .map_err(|e| anyhow!("scrypt failed: {:?}", e))?;
+        Ok(derived_key)
     }
 
     pub fn encrypt_text(
@@ -134,7 +192,7 @@ impl SecurityUtil {
         let mut nonce_bytes = [0u8; NONCE_LEN];
         rand::rngs::OsRng.try_fill_bytes(&mut salt)?;
         rand::rngs::OsRng.try_fill_bytes(&mut nonce_bytes)?;
-        let mut derived_key_bytes = Self::derive_key(master_key, &salt);
+        let mut derived_key_bytes = Self::derive_key(master_key, &salt)?;
         let derived_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key_bytes);
 
         let cipher = Aes256Gcm::new(derived_key);
@@ -154,7 +212,7 @@ impl SecurityUtil {
         nonce_bytes: &[u8],
         salt: &[u8],
     ) -> anyhow::Result<Vec<u8>> {
-        let mut derived_key_bytes = Self::derive_key(master_key, salt);
+        let mut derived_key_bytes = Self::derive_key(master_key, salt)?;
         let derived_key = aes_gcm::Key::<Aes256Gcm>::from_slice(&derived_key_bytes);
         let cipher = Aes256Gcm::new(derived_key);
 
@@ -181,13 +239,31 @@ impl SecurityUtil {
         let startup_msg = Self::create_startup_message(username).await?;
         stream.write_all(startup_msg.as_slice()).await?;
 
-        let mut startup_resp = [0u8; 256];
-        let n = stream.read(&mut startup_resp).await?;
-        if n == 0 || startup_resp[0] != b'R' {
+        let startup_resp = Self::read_message(&mut stream).await?;
+        let n = startup_resp.len();
+        if n < Self::HEADER_OFFSET || startup_resp[0] != b'R' {
             return Err(anyhow!(
                 "Getting invalid startup response from server {:?}",
-                startup_resp
+                &startup_resp[..]
             ));
+        }
+        let auth_type = i32::from_be_bytes(
+            startup_resp[5..9]
+                .try_into()
+                .map_err(|_| anyhow!("Invalid startup auth_type"))?,
+        );
+        match auth_type {
+            Self::AUTH_OK => return Ok(stream),
+            Self::AUTH_SASL => {
+                let payload = &startup_resp[Self::HEADER_OFFSET..n];
+                if !payload
+                    .windows("SCRAM-SHA-256".len())
+                    .any(|w| w == b"SCRAM-SHA-256")
+                {
+                    return Err(anyhow!("Server does not offer SCRAM-SHA-256"));
+                }
+            }
+            _ => return Err(anyhow!("Unsupported auth type {}", auth_type)),
         }
 
         let (scram, client_first) = scram.client_first();
@@ -195,20 +271,31 @@ impl SecurityUtil {
         let size = 1 + 4 + 13 + 4 + 1 + client_first.len();
         client_first_msg.write_u8(b'p').await?;
         client_first_msg.write_i32(size as i32).await?;
-        client_first_msg.write("SCRAM-SHA-256".as_bytes()).await?;
-        client_first_msg.write("\0\0\0\0 ".as_bytes()).await?;
-        client_first_msg.write(client_first.as_bytes()).await?;
+        client_first_msg
+            .write_all("SCRAM-SHA-256".as_bytes())
+            .await?;
+        client_first_msg.write_all("\0\0\0\0 ".as_bytes()).await?;
+        client_first_msg.write_all(client_first.as_bytes()).await?;
         stream.write_all(client_first_msg.as_slice()).await?;
 
-        let mut server_first = [0u8; 256];
-        let n = stream.read(&mut server_first).await?;
-        if n == 0 || server_first[0] != b'R' {
+        let server_first = Self::read_message(&mut stream).await?;
+        let n = server_first.len();
+        if n <= Self::HEADER_OFFSET || server_first[0] != b'R' {
             return Err(anyhow!(
                 "Getting invalid server first message {:?}",
-                server_first
+                &server_first[..]
             ));
         }
-        let server_first_str = String::from_utf8(Vec::from(&server_first[Self::HEADER_OFFSET..n]))?;
+        let auth_type = i32::from_be_bytes(
+            server_first[5..9]
+                .try_into()
+                .map_err(|_| anyhow!("Invalid server first auth_type"))?,
+        );
+        if auth_type != Self::AUTH_SASL_CONTINUE {
+            return Err(anyhow!("Unexpected auth type {}", auth_type));
+        }
+        let server_first_str =
+            String::from_utf8(Vec::from(&server_first[Self::HEADER_OFFSET..n]))?;
         let scram = scram.handle_server_first(&server_first_str)?;
 
         let (scram, client_final) = scram.client_final();
@@ -216,24 +303,45 @@ impl SecurityUtil {
         let size = 1 + 4 + client_final.len();
         client_final_msg.write_u8(b'p').await?;
         client_final_msg.write_i32(size as i32).await?;
-        client_final_msg.write(client_final.as_bytes()).await?;
+        client_final_msg.write_all(client_final.as_bytes()).await?;
         stream.write_all(client_final_msg.as_slice()).await?;
 
-        let mut server_final = [0u8; 256];
-        let n = stream.read(&mut server_final).await?;
-        if n == 0 || server_final[0] != b'R' {
+        let server_final = Self::read_message(&mut stream).await?;
+        let n = server_final.len();
+        if n <= Self::HEADER_OFFSET || server_final[0] != b'R' {
             return Err(anyhow!(
                 "Getting invalid server final message {:?}",
-                server_first
+                &server_final[..]
             ));
         }
-        let size_slice: &[u8] = &server_final[1..1+4];
-        let size = u32::from_be_bytes(size_slice.try_into().unwrap()) + 1;
-        let server_final_str = String::from_utf8(Vec::from(&server_final[Self::HEADER_OFFSET..size as usize]))?;
+        let auth_type = i32::from_be_bytes(
+            server_final[5..9]
+                .try_into()
+                .map_err(|_| anyhow!("Invalid server final auth_type"))?,
+        );
+        if auth_type != Self::AUTH_SASL_FINAL {
+            return Err(anyhow!("Unexpected auth type {}", auth_type));
+        }
+        let server_final_str =
+            String::from_utf8(Vec::from(&server_final[Self::HEADER_OFFSET..n]))?;
         scram.handle_server_final(&server_final_str)?;
 
-        let mut auth_success = [0u8; 256];
-        let _ = stream.read(&mut auth_success).await?;
+        let auth_success = Self::read_message(&mut stream).await?;
+        let n = auth_success.len();
+        if n == 0 || auth_success[0] == b'E' {
+            return Err(anyhow!("Authentication failed"));
+        }
+        if n < Self::HEADER_OFFSET || auth_success[0] != b'R' {
+            return Err(anyhow!("Unexpected auth success response"));
+        }
+        let auth_type = i32::from_be_bytes(
+            auth_success[5..9]
+                .try_into()
+                .map_err(|_| anyhow!("Invalid auth success auth_type"))?,
+        );
+        if auth_type != Self::AUTH_OK {
+            return Err(anyhow!("Authentication did not succeed (auth_type={})", auth_type));
+        }
         Ok(stream)
     }
 
@@ -244,17 +352,17 @@ impl SecurityUtil {
         let size = 4 + 4 + 4 + 1 + us + 1 + 8 + 1 + ds + 1 + 17 + 9 + 1;
         msg.write_i32(size as i32).await?;
         msg.write_i32(Self::MAGIC).await?;
-        msg.write(Self::KEY_USER.as_bytes()).await?;
+        msg.write_all(Self::KEY_USER.as_bytes()).await?;
         msg.write_u8(b'\0').await?;
-        msg.write(username.as_bytes()).await?;
+        msg.write_all(username.as_bytes()).await?;
         msg.write_u8(b'\0').await?;
-        msg.write(Self::KEY_DATABASE.as_bytes()).await?;
+        msg.write_all(Self::KEY_DATABASE.as_bytes()).await?;
         msg.write_u8(b'\0').await?;
-        msg.write(Self::DB_ADMIN.as_bytes()).await?;
+        msg.write_all(Self::DB_ADMIN.as_bytes()).await?;
         msg.write_u8(b'\0').await?;
-        msg.write(Self::KEY_APP_NAME.as_bytes()).await?;
+        msg.write_all(Self::KEY_APP_NAME.as_bytes()).await?;
         msg.write_u8(b'\0').await?;
-        msg.write(Self::APP_PGMONETA.as_bytes()).await?;
+        msg.write_all(Self::APP_PGMONETA.as_bytes()).await?;
         msg.write_u8(b'\0').await?;
         msg.write_u8(b'\0').await?;
         Ok(msg)

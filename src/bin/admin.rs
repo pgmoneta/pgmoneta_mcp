@@ -18,7 +18,6 @@ use configuration::UserConf;
 use pgmoneta_mcp::configuration;
 use pgmoneta_mcp::security::SecurityUtil;
 use rpassword::prompt_password;
-use serde_ini;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
