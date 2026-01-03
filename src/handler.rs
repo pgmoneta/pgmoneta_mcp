@@ -73,39 +73,7 @@ impl PgmonetaHandler {
                 None,
             ));
         }
-        if let Value::Object(outcome) = response.get(MANAGEMENT_CATEGORY_OUTCOME).unwrap() {
-            if !outcome.contains_key(MANAGEMENT_ARGUMENT_STATUS) {
-                return Err(McpError::internal_error(
-                    format!("Fail to find status inside outcome {:?}", outcome),
-                    None,
-                ));
-            }
-            if let &Value::Bool(status) = outcome.get(MANAGEMENT_ARGUMENT_STATUS).unwrap() {
-                if !status {
-                    return Err(McpError::invalid_request(
-                        format!("Getting false status inside outcome {:?}", outcome),
-                        None,
-                    ));
-                }
-                Ok(response)
-            } else {
-                Err(McpError::internal_error(
-                    format!(
-                        "Incorrect status type inside outcome {:?}, expect bool",
-                        outcome
-                    ),
-                    None,
-                ))
-            }
-        } else {
-            Err(McpError::internal_error(
-                format!(
-                    "Incorrect outcome type inside response {:?}, expect json object",
-                    response
-                ),
-                None,
-            ))
-        }
+        Ok(response)
     }
 
     fn _translate_result<'a, M>(map: M) -> anyhow::Result<Map<String, Value>>
@@ -113,7 +81,7 @@ impl PgmonetaHandler {
         M: IntoIterator<Item = (&'a String, &'a Value)>,
     {
         // fields to be translated
-        // file size, hex string, compression, encryption, command method, object(recursive)
+        // file size, hex string, compression, encryption, command method, object(recursive), error
         let file_size_fields = vec![
             "BackupSize",
             "RestoreSize",
@@ -137,6 +105,7 @@ impl PgmonetaHandler {
         let compression_field = "Compression";
         let encryption_field = "Encryption";
         let command_field = "Command";
+        let error_field = "Error";
 
         let mut trans_res: Map<String, Value> = Map::new();
         for (key, value) in map {
@@ -160,6 +129,10 @@ impl PgmonetaHandler {
                 let command = value.as_u64().unwrap();
                 let command_str = Command::translate_command_enum(command as u32)?;
                 trans_res.insert(key.clone(), Value::from(command_str));
+            } else if key == error_field {
+                let error = value.as_u64().unwrap();
+                let error_msg = ManagementError::translate_error_enum(error as u32);
+                trans_res.insert(key.clone(), Value::from(error_msg));
             } else if object_arr_fields.contains(&key.as_str()) {
                 let arr = value.as_array().unwrap();
                 let mut trans_arr: Vec<Value> = Vec::new();
