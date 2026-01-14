@@ -147,12 +147,13 @@ impl ManagementError {
     pub const MANAGEMENT_ERROR_DELETE_BACKUP_SETUP: u32 = 500;
     pub const MANAGEMENT_ERROR_DELETE_BACKUP_EXECUTE: u32 = 501;
     pub const MANAGEMENT_ERROR_DELETE_BACKUP_TEARDOWN: u32 = 502;
-    pub const MANAGEMENT_ERROR_DELETE_BACKUP_NOBACKUPS: u32 = 503;
-    pub const MANAGEMENT_ERROR_DELETE_BACKUP_NOBACKUP: u32 = 504;
-    pub const MANAGEMENT_ERROR_DELETE_BACKUP_RETAINED: u32 = 505;
-    pub const MANAGEMENT_ERROR_DELETE_BACKUP_ROLLUP: u32 = 506;
-    pub const MANAGEMENT_ERROR_DELETE_BACKUP_FULL: u32 = 507;
-    pub const MANAGEMENT_ERROR_DELETE_BACKUP_ERROR: u32 = 508;
+    pub const MANAGEMENT_ERROR_DELETE_BACKUP_ACTIVE: u32 = 503;
+    pub const MANAGEMENT_ERROR_DELETE_BACKUP_NOBACKUPS: u32 = 504;
+    pub const MANAGEMENT_ERROR_DELETE_BACKUP_NOBACKUP: u32 = 505;
+    pub const MANAGEMENT_ERROR_DELETE_BACKUP_RETAINED: u32 = 506;
+    pub const MANAGEMENT_ERROR_DELETE_BACKUP_ROLLUP: u32 = 507;
+    pub const MANAGEMENT_ERROR_DELETE_BACKUP_FULL: u32 = 508;
+    pub const MANAGEMENT_ERROR_DELETE_BACKUP_ERROR: u32 = 509;
 
     pub const MANAGEMENT_ERROR_RESTORE_NOBACKUP: u32 = 600;
     pub const MANAGEMENT_ERROR_RESTORE_NODISK: u32 = 601;
@@ -335,6 +336,7 @@ impl ManagementError {
             Self::MANAGEMENT_ERROR_DELETE_BACKUP_SETUP => "Delete backup: setup failed",
             Self::MANAGEMENT_ERROR_DELETE_BACKUP_EXECUTE => "Delete backup: execution failed",
             Self::MANAGEMENT_ERROR_DELETE_BACKUP_TEARDOWN => "Delete backup: teardown failed",
+            Self::MANAGEMENT_ERROR_DELETE_BACKUP_ACTIVE => "Delete: another active process happening",
             Self::MANAGEMENT_ERROR_DELETE_BACKUP_NOBACKUPS => "Delete backup: no backups available",
             Self::MANAGEMENT_ERROR_DELETE_BACKUP_NOBACKUP => "Delete backup: backup not found",
             Self::MANAGEMENT_ERROR_DELETE_BACKUP_RETAINED => "Delete backup: backup is retained",
