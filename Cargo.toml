@@ -1,6 +1,6 @@
 [package]
 name = "pgmoneta-mcp"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Haoran Zhang <andrewzhr9911@gmail.com>", "Jesper Pedersen <jesperpedersen.db@gmail.com>"]
