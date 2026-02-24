@@ -18,25 +18,46 @@ use anyhow::anyhow;
 /// This client version is to match pgmoneta-cli
 pub const CLIENT_VERSION: &str = "0.20.0";
 
+/// JSON key used to extract the outcome category from management responses.
 pub const MANAGEMENT_CATEGORY_OUTCOME: &str = "Outcome";
+/// JSON key used to extract the status argument from management responses.
 pub const MANAGEMENT_ARGUMENT_STATUS: &str = "Status";
+/// The default relative path to the master key file used for authentication/encryption.
 pub const MASTER_KEY_PATH: &str = ".pgmoneta-mcp/master.key";
 
+/// Represents management commands sent to the pgmoneta server.
 pub struct Command;
+/// Represents output format types (e.g., JSON).
 pub struct Format;
+/// Represents compression algorithms supported by pgmoneta.
 pub struct Compression;
+/// Represents encryption algorithms supported by pgmoneta.
 pub struct Encryption;
+/// Represents error codes returned by pgmoneta management operations.
 pub struct ManagementError;
+/// Represents sorting directions (ascending/descending).
 pub struct Sort;
+/// Represents logging verbosity levels.
 pub struct LogLevel;
 
+/// Represents logging output destinations (console, file, syslog).
 pub struct LogType;
+/// Represents file logging modes (append, create).
 pub struct LogMode;
 
 impl Command {
+    /// Command to list available backups.
     pub const LIST_BACKUP: u32 = 2;
+    /// Command to retrieve server/backup info.
     pub const INFO: u32 = 18;
 
+    /// Translates a numeric management command code into its string representation.
+    ///
+    /// # Arguments
+    /// * `command` - The `u32` code representing a pgmoneta command.
+    ///
+    /// # Returns
+    /// Returns the string literal for the command, or an error if the code is unrecognized.
     pub fn translate_command_enum(command: u32) -> anyhow::Result<&'static str> {
         match command {
             Self::LIST_BACKUP => Ok("list-backup"),
@@ -46,8 +67,16 @@ impl Command {
     }
 }
 impl Format {
+    /// Standard JSON output format.
     pub const JSON: u8 = 0;
 
+    /// Translates a numeric format code into its string representation.
+    ///
+    /// # Arguments
+    /// * `format` - The `u8` code representing a data format.
+    ///
+    /// # Returns
+    /// Returns the string literal for the format, or an error if the code is unrecognized.
     pub fn translate_format_enum(format: u8) -> anyhow::Result<&'static str> {
         match format {
             Self::JSON => Ok("json"),
@@ -57,15 +86,30 @@ impl Format {
 }
 
 impl Compression {
+    /// No compression.
     pub const NONE: u8 = 0;
+    /// Gzip compression.
     pub const GZIP: u8 = 1;
+    /// Zstandard compression.
     pub const ZSTD: u8 = 2;
+    /// LZ4 compression.
     pub const LZ4: u8 = 3;
+    /// Bzip2 compression.
     pub const BZIP2: u8 = 4;
+    /// Server-side Gzip compression.
     pub const SERVER_GZIP: u8 = 5;
+    /// Server-side Zstandard compression.
     pub const SERVER_ZSTD: u8 = 6;
+    /// Server-side LZ4 compression.
     pub const SERVER_LZ4: u8 = 7;
 
+    /// Translates a numeric compression code into its string representation.
+    ///
+    /// # Arguments
+    /// * `compression` - The `u8` code representing a compression algorithm.
+    ///
+    /// # Returns
+    /// Returns the string literal for the algorithm, or an error if the code is unrecognized.
     pub fn translate_compression_enum(compression: u8) -> anyhow::Result<&'static str> {
         match compression {
             Self::NONE => Ok("none"),
@@ -82,14 +126,28 @@ impl Compression {
 }
 
 impl Encryption {
+    /// No encryption.
     pub const NONE: u8 = 0;
+    /// AES-256 with Cipher Block Chaining.
     pub const AES_256_CBC: u8 = 1;
+    /// AES-192 with Cipher Block Chaining.
     pub const AES_192_CBC: u8 = 2;
+    /// AES-128 with Cipher Block Chaining.
     pub const AES_128_CBC: u8 = 3;
+    /// AES-256 with Counter Mode.
     pub const AES_256_CTR: u8 = 4;
+    /// AES-192 with Counter Mode.
     pub const AES_192_CTR: u8 = 5;
+    /// AES-128 with Counter Mode.
     pub const AES_128_CTR: u8 = 6;
 
+    /// Translates a numeric encryption code into its string representation.
+    ///
+    /// # Arguments
+    /// * `encryption` - The `u8` code representing an encryption algorithm.
+    ///
+    /// # Returns
+    /// Returns the string literal for the algorithm, or an error if the code is unrecognized.
     pub fn translate_encryption_enum(encryption: u8) -> anyhow::Result<&'static str> {
         match encryption {
             Encryption::NONE => Ok("none"),
@@ -286,6 +344,13 @@ impl ManagementError {
     pub const MANAGEMENT_ERROR_MODE_ERROR: u32 = 2804;
     pub const MANAGEMENT_ERROR_MODE_UNKNOWN_ACTION: u32 = 2805;
 
+    /// Translates a numeric management error code into a human-readable string.
+    ///
+    /// # Arguments
+    /// * `error` - The `u32` error code returned by the pgmoneta server.
+    ///
+    /// # Returns
+    /// Returns a string literal describing the error, or "Unknown error" if the code is unrecognized.
     pub fn translate_error_enum(error: u32) -> &'static str {
         match error {
             Self::MANAGEMENT_ERROR_BAD_PAYLOAD => "Bad request payload",
@@ -487,26 +552,37 @@ impl ManagementError {
 }
 
 impl Sort {
+    /// Sort in ascending order.
     pub const ASC: &str = "asc";
+    /// Sort in descending order.
     pub const DESC: &str = "desc";
 }
 
 impl LogLevel {
+    /// Trace-level logging.
     pub const TRACE: &str = "trace";
+    /// Debug-level logging.
     pub const DEBUG: &str = "debug";
-
+    /// Info-level logging.
     pub const INFO: &str = "info";
+    /// Warn-level logging.
     pub const WARN: &str = "warn";
+    /// Error-level logging.
     pub const ERROR: &str = "error";
 }
 
 impl LogType {
+    /// Log to standard console output.
     pub const CONSOLE: &str = "console";
+    /// Log to a file.
     pub const FILE: &str = "file";
+    /// Log to system syslog.
     pub const SYSLOG: &str = "syslog";
 }
 
 impl LogMode {
+    /// Append to the existing log file.
     pub const APPEND: &str = "append";
+    /// Overwrite or create a new log file.
     pub const CREATE: &str = "create";
 }
