@@ -53,3 +53,6 @@ serde_ini = "0.2.0"
 tracing-appender = "0.2.4"
 syslog-tracing = "0.3.1"
 
+[target.'cfg(windows)'.dependencies]
+winlog2 = "0.3.2"
+log = "0.4"
