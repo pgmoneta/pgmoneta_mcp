@@ -66,6 +66,12 @@ pub struct PgmonetaMcpConfiguration {
     /// The port the MCP server starts on. Default: 8000.
     #[serde(default = "default_port")]
     pub port: i32,
+<<<<<<< HEAD
+=======
+    /// API key to username mapping for authenticating MCP requests.
+    #[serde(default = "default_api_keys")]
+    pub api_keys: HashMap<String, String>, // api_key -> username
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
     /// The log file location. Default: `pgmoneta_mcp.log`.
     #[serde(default = "default_log_path")]
     pub log_path: String,
@@ -93,6 +99,10 @@ pub struct PgmonetaMcpConfiguration {
     /// Default: `0`.
     #[serde(default = "default_log_rotation_age")]
     pub log_rotation_age: String,
+<<<<<<< HEAD
+=======
+>>>>>>> 25c2ddd (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
 }
 
 /// Loads the main configuration and user configuration from the specified file paths.
@@ -172,6 +182,13 @@ fn default_log_mode() -> String {
     "append".to_string()
 }
 
+<<<<<<< HEAD
+=======
+fn default_api_keys() -> HashMap<String, String> {
+    HashMap::new()
+}
+
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
 fn default_log_rotation_age() -> String {
     "0".to_string()
 }

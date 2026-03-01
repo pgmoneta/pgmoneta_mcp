@@ -65,8 +65,17 @@ impl Logger {
         log_format: &str,
         log_path: &str,
         log_mode: &str,
+<<<<<<< HEAD
         log_rotation_age: &str,
     ) -> Option<WorkerGuard> {
+=======
+<<<<<<< HEAD
+    ) -> Option<WorkerGuard> {
+        let (writer, guard) = Self::make_writer(log_type, log_path, log_mode);
+=======
+        log_rotation_age: &str,
+    ) -> Option<WorkerGuard> {
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
         let (writer, guard) = Self::make_writer(log_type, log_path, log_mode, log_rotation_age)
             .unwrap_or_else(|e| {
                 eprintln!(
@@ -75,6 +84,10 @@ impl Logger {
                 );
                 (BoxMakeWriter::new(std::io::stderr), None)
             });
+<<<<<<< HEAD
+=======
+>>>>>>> 25c2ddd (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
         let level = Self::get_level(log_level);
         let targets = Targets::new()
             .with_target("pgmoneta_mcp", level)
@@ -109,10 +122,23 @@ impl Logger {
         log_type: &str,
         log_path: &str,
         log_mode: &str,
+<<<<<<< HEAD
         log_rotation_age: &str,
     ) -> anyhow::Result<(BoxMakeWriter, Option<WorkerGuard>)> {
         match log_type {
             LogType::CONSOLE => Ok((BoxMakeWriter::new(std::io::stderr), None)),
+=======
+<<<<<<< HEAD
+    ) -> (BoxMakeWriter, Option<WorkerGuard>) {
+        match log_type {
+            LogType::CONSOLE => (BoxMakeWriter::new(std::io::stderr), None),
+=======
+        log_rotation_age: &str,
+    ) -> anyhow::Result<(BoxMakeWriter, Option<WorkerGuard>)> {
+        match log_type {
+            LogType::CONSOLE => Ok((BoxMakeWriter::new(std::io::stderr), None)),
+>>>>>>> 25c2ddd (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
             LogType::FILE => match log_mode {
                 LogMode::CREATE => {
                     let file = OpenOptions::new()
@@ -120,6 +146,28 @@ impl Logger {
                         .create(true)
                         .truncate(true)
                         .open(log_path)
+<<<<<<< HEAD
+                        .context(format!("Failed to open log file: {}", log_path))?;
+=======
+<<<<<<< HEAD
+                        .unwrap_or_else(|_| panic!("Failed to open log file: {}", log_path));
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
+
+                    let (writer, _guard) = tracing_appender::non_blocking(file);
+                    Ok((BoxMakeWriter::new(writer), Some(_guard)))
+                }
+                LogMode::APPEND => {
+                    let rotation = Self::map_log_rotation_age(log_rotation_age)?;
+                    let file_appender = RollingFileAppender::new(rotation, ".", log_path);
+                    let (writer, _guard) = tracing_appender::non_blocking(file_appender);
+                    Ok((BoxMakeWriter::new(writer), Some(_guard)))
+                }
+                _ => Err(anyhow::anyhow!("Invalid log mode: {}", log_mode)),
+            },
+<<<<<<< HEAD
+            #[cfg(unix)]
+=======
+=======
                         .context(format!("Failed to open log file: {}", log_path))?;
 
                     let (writer, _guard) = tracing_appender::non_blocking(file);
@@ -134,11 +182,14 @@ impl Logger {
                 _ => Err(anyhow::anyhow!("Invalid log mode: {}", log_mode)),
             },
             #[cfg(unix)]
+>>>>>>> 25c2ddd (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
             LogType::SYSLOG => {
                 let identity = c"pgmoneta-mcp";
                 let (options, facility) = Default::default();
                 let syslog = Syslog::new(identity, options, facility).unwrap();
                 Ok((BoxMakeWriter::new(syslog), None))
+<<<<<<< HEAD
             }
             #[cfg(windows)]
             LogType::SYSLOG => {
@@ -157,6 +208,48 @@ impl Logger {
                 Ok((BoxMakeWriter::new(std::io::sink), None))
             }
             _ => Err(anyhow::anyhow!("Invalid log type: {}", log_type)),
+        }
+    }
+
+    fn map_log_rotation_age(log_rotation_age: &str) -> anyhow::Result<Rotation> {
+        let error_msg = format!("Invalid log rotation age: {}", log_rotation_age);
+        if log_rotation_age.len() != 1 {
+            Err(anyhow::anyhow!(error_msg))
+        } else {
+            let c = log_rotation_age.chars().next().unwrap();
+            if c == 'm' || c == 'M' {
+                Ok(Rotation::MINUTELY)
+            } else if c == 'h' || c == 'H' {
+                Ok(Rotation::HOURLY)
+            } else if c == 'd' || c == 'D' {
+                Ok(Rotation::DAILY)
+            } else if c == 'w' || c == 'W' {
+                Ok(Rotation::WEEKLY)
+            } else if c == '0' {
+                Ok(Rotation::NEVER)
+            } else {
+                Err(anyhow::anyhow!(error_msg))
+            }
+=======
+            }
+            #[cfg(windows)]
+            LogType::SYSLOG => {
+                if let Err(e) = winlog2::register("pgmoneta-mcp") {
+                    return Err(anyhow::anyhow!(
+                        "Failed to register Windows Event Log source: {}",
+                        e
+                    ));
+                }
+                if let Err(e) = winlog2::init("pgmoneta-mcp") {
+                    return Err(anyhow::anyhow!(
+                        "Failed to initialize Windows Event Logger: {}",
+                        e
+                    ));
+                }
+                Ok((BoxMakeWriter::new(std::io::sink), None))
+            }
+            _ => Err(anyhow::anyhow!("Invalid log type: {}", log_type)),
+>>>>>>> 9679ae3 (Security: Fix Authentication Bypass, XSS hardening, and API key handling)
         }
     }
 
