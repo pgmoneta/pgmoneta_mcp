@@ -16,7 +16,7 @@
 use anyhow::anyhow;
 
 /// This client version is to match pgmoneta-cli
-pub const CLIENT_VERSION: &str = "0.20.0";
+pub const CLIENT_VERSION: &str = "0.21.0";
 
 /// JSON key used to extract the outcome category from management responses.
 pub const MANAGEMENT_CATEGORY_OUTCOME: &str = "Outcome";
@@ -46,10 +46,54 @@ pub struct LogType;
 pub struct LogMode;
 
 impl Command {
+    /// Command to perform a backup.
+    pub const BACKUP: u32 = 1;
     /// Command to list available backups.
     pub const LIST_BACKUP: u32 = 2;
+    /// Command to restore a backup.
+    pub const RESTORE: u32 = 3;
+    /// Command to archive a backup.
+    pub const ARCHIVE: u32 = 4;
+    /// Command to delete a backup.
+    pub const DELETE: u32 = 5;
+    /// Command to shut down pgmoneta.
+    pub const SHUTDOWN: u32 = 6;
+    /// Command to retrieve server status.
+    pub const STATUS: u32 = 7;
+    /// Command to retrieve detailed server status.
+    pub const STATUS_DETAILS: u32 = 8;
+    /// Command to ping (health check) pgmoneta.
+    pub const PING: u32 = 9;
+    /// Command to reset Prometheus statistics.
+    pub const RESET: u32 = 10;
+    /// Command to reload the configuration.
+    pub const RELOAD: u32 = 11;
+    /// Command to retain a backup.
+    pub const RETAIN: u32 = 12;
+    /// Command to expunge (un-retain) a backup.
+    pub const EXPUNGE: u32 = 13;
+    /// Command to decrypt a file.
+    pub const DECRYPT: u32 = 14;
+    /// Command to encrypt a file.
+    pub const ENCRYPT: u32 = 15;
+    /// Command to decompress a file.
+    pub const DECOMPRESS: u32 = 16;
+    /// Command to compress a file.
+    pub const COMPRESS: u32 = 17;
     /// Command to retrieve server/backup info.
     pub const INFO: u32 = 18;
+    /// Command to verify a backup.
+    pub const VERIFY: u32 = 19;
+    /// Command to annotate a backup.
+    pub const ANNOTATE: u32 = 20;
+    /// Command to list configuration file paths.
+    pub const CONF_LS: u32 = 21;
+    /// Command to get a configuration value.
+    pub const CONF_GET: u32 = 22;
+    /// Command to set a configuration value.
+    pub const CONF_SET: u32 = 23;
+    /// Command to switch server online/offline mode.
+    pub const MODE: u32 = 24;
 
     /// Translates a numeric management command code into its string representation.
     ///
@@ -60,8 +104,30 @@ impl Command {
     /// Returns the string literal for the command, or an error if the code is unrecognized.
     pub fn translate_command_enum(command: u32) -> anyhow::Result<&'static str> {
         match command {
+            Self::BACKUP => Ok("backup"),
             Self::LIST_BACKUP => Ok("list-backup"),
+            Self::RESTORE => Ok("restore"),
+            Self::ARCHIVE => Ok("archive"),
+            Self::DELETE => Ok("delete"),
+            Self::SHUTDOWN => Ok("shutdown"),
+            Self::STATUS => Ok("status"),
+            Self::STATUS_DETAILS => Ok("status details"),
+            Self::PING => Ok("ping"),
+            Self::RESET => Ok("clear prometheus"),
+            Self::RELOAD => Ok("conf reload"),
+            Self::RETAIN => Ok("retain"),
+            Self::EXPUNGE => Ok("expunge"),
+            Self::DECRYPT => Ok("decrypt"),
+            Self::ENCRYPT => Ok("encrypt"),
+            Self::DECOMPRESS => Ok("decompress"),
+            Self::COMPRESS => Ok("compress"),
             Self::INFO => Ok("info"),
+            Self::VERIFY => Ok("verify"),
+            Self::ANNOTATE => Ok("annotate"),
+            Self::CONF_LS => Ok("conf ls"),
+            Self::CONF_GET => Ok("conf get"),
+            Self::CONF_SET => Ok("conf set"),
+            Self::MODE => Ok("mode"),
             default => Err(anyhow!("Unrecognized command enum: {default}")),
         }
     }
