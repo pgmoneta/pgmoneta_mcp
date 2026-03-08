@@ -13,18 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+mod hello;
 mod info;
 
-use super::client::PgmonetaClient;
 use super::constant::*;
 use super::constant::{Command, Compression, Encryption};
 use crate::utils::Utility;
 use rmcp::{
-    ErrorData as McpError, RoleServer, ServerHandler,
-    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
-    model::*,
-    service::RequestContext,
-    tool, tool_handler, tool_router,
+    ErrorData as McpError, RoleServer, ServerHandler, handler::server::router::tool::ToolRouter,
+    model::*, service::RequestContext, tool_handler,
 };
 use serde_json::Map;
 use serde_json::Value;
@@ -38,7 +35,6 @@ pub struct PgmonetaHandler {
     tool_router: ToolRouter<PgmonetaHandler>,
 }
 
-#[tool_router]
 impl PgmonetaHandler {
     /// Creates a new instance of the `PgmonetaHandler` with an initialized tool router.
     pub fn new() -> Self {
@@ -47,38 +43,12 @@ impl PgmonetaHandler {
         }
     }
 
-    /// Simple ping tool to verify the MCP server is responsive.
-    #[tool(description = "Say hello to the client")]
-    fn say_hello(&self) -> Result<CallToolResult, McpError> {
-        Ok(CallToolResult::success(vec![Content::text(
-            "Hello from pgmoneta MCP server!",
-        )]))
-    }
-
-    /// Tool for fetching detailed information about a specific backup.
-    #[tool(
-        description = "Get information of a backup using given backup ID and server name. \
-    \"newest\", \"latest\" or \"oldest\" are also accepted as backup identifier.\
-    The username has to be one of the pgmoneta admins to be able to access pgmoneta"
-    )]
-    async fn get_backup_info(
-        &self,
-        Parameters(args): Parameters<info::InfoRequest>,
-    ) -> Result<CallToolResult, McpError> {
-        let result = self._get_backup_info(args).await?;
-        Self::_generate_call_tool_result(&result)
-    }
-
-    /// Tool for listing available backups on a specified server.
-    #[tool(description = "List backups of a server. \
-        Specify asc or desc to determine the sorting order.\
-        The backups are sorted in ascending order if not specified.")]
-    async fn list_backups(
-        &self,
-        Parameters(args): Parameters<info::ListBackupsRequest>,
-    ) -> Result<CallToolResult, McpError> {
-        let result = self._list_backups(args).await?;
-        Self::_generate_call_tool_result(&result)
+    /// Builds the tool router by registering each tool via the trait-based API.
+    pub fn tool_router() -> ToolRouter<Self> {
+        ToolRouter::new()
+            .with_sync_tool::<hello::SayHelloTool>()
+            .with_async_tool::<info::GetBackupInfoTool>()
+            .with_async_tool::<info::ListBackupsTool>()
     }
 }
 
@@ -86,7 +56,7 @@ impl PgmonetaHandler {
     /// Parses the raw string response from pgmoneta into a JSON map.
     ///
     /// Ensures the response contains the required `Outcome` category key.
-    fn _parse_and_check_result(result: &str) -> Result<Map<String, Value>, McpError> {
+    pub(crate) fn _parse_and_check_result(result: &str) -> Result<Map<String, Value>, McpError> {
         let response: Map<String, Value> = serde_json::from_str(result).map_err(|e| {
             McpError::parse_error(format!("Failed to parse result {result}: {:?}", e), None)
         })?;
@@ -105,7 +75,7 @@ impl PgmonetaHandler {
     /// * Formatting byte counts into human-readable file sizes (e.g., KB, MB).
     /// * Converting LSNs (Log Sequence Numbers) into hex strings.
     /// * Translating numeric enum codes (Compression, Encryption, Error) into descriptive strings.
-    fn _translate_result<'a, M>(map: M) -> anyhow::Result<Map<String, Value>>
+    pub(crate) fn _translate_result<'a, M>(map: M) -> anyhow::Result<Map<String, Value>>
     where
         M: IntoIterator<Item = (&'a String, &'a Value)>,
     {
@@ -190,9 +160,9 @@ impl PgmonetaHandler {
         Ok(trans_res)
     }
 
-    /// Wraps the parsed and translated pgmoneta response into a standardized `CallToolResult`
-    /// that can be sent back to the MCP client.
-    fn _generate_call_tool_result(result: &str) -> Result<CallToolResult, McpError> {
+    /// Parses, translates, and serializes the pgmoneta response into a JSON string
+    /// suitable for returning as tool output.
+    pub(crate) fn generate_call_tool_result_string(result: &str) -> Result<String, McpError> {
         let res = Self::_parse_and_check_result(result)?;
         let trans_res = Self::_translate_result(&res).map_err(|e| {
             McpError::internal_error(
@@ -200,10 +170,9 @@ impl PgmonetaHandler {
                 None,
             )
         })?;
-        let trans_res_str = serde_json::to_string(&trans_res).map_err(|e| {
+        serde_json::to_string(&trans_res).map_err(|e| {
             McpError::internal_error(format!("Failed to serialize result: {:?}", e), None)
-        })?;
-        Ok(CallToolResult::success(vec![Content::text(trans_res_str)]))
+        })
     }
 }
 
@@ -217,20 +186,14 @@ impl Default for PgmonetaHandler {
 impl ServerHandler for PgmonetaHandler {
     /// Provides the MCP initialization capabilities and metadata for this server.
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            protocol_version: ProtocolVersion::V_2024_11_05,
-            capabilities: ServerCapabilities::builder()
-                .enable_tools()
-                .build(),
-            server_info: Implementation::from_build_env(),
-            instructions: Some("This server provides capabilities to interact with pgmoneta, a backup/restore tool for PostgreSQL.".to_string()),
-        }
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_instructions("This server provides capabilities to interact with pgmoneta, a backup/restore tool for PostgreSQL.")
     }
 
     /// Handles the initial connection setup and handshake from an MCP client.
     async fn initialize(
         &self,
-        _request: InitializeRequestParam,
+        _request: InitializeRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<InitializeResult, McpError> {
         if let Some(http_request_part) = context.extensions.get::<axum::http::request::Parts>() {
@@ -239,5 +202,60 @@ impl ServerHandler for PgmonetaHandler {
             tracing::info!(?initialize_headers, %initialize_uri, "initialize from http server");
         }
         Ok(self.get_info())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_and_check_result_valid() {
+        let input = r#"{"Outcome": "success", "Server": "test"}"#;
+        let result = PgmonetaHandler::_parse_and_check_result(input);
+        assert!(result.is_ok());
+        let map = result.unwrap();
+        assert_eq!(map.get("Outcome").unwrap(), "success");
+        assert_eq!(map.get("Server").unwrap(), "test");
+    }
+
+    #[test]
+    fn test_parse_and_check_result_missing_outcome() {
+        let input = r#"{"Server": "test"}"#;
+        let result = PgmonetaHandler::_parse_and_check_result(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_and_check_result_invalid_json() {
+        let input = "not valid json";
+        let result = PgmonetaHandler::_parse_and_check_result(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_translate_result_file_size() {
+        let mut map = Map::new();
+        map.insert("BackupSize".to_string(), json!(1048576));
+        map.insert("Server".to_string(), json!("test"));
+
+        let result = PgmonetaHandler::_translate_result(&map);
+        assert!(result.is_ok());
+        let translated = result.unwrap();
+        assert_eq!(translated.get("BackupSize").unwrap(), "1.00 MB");
+        assert_eq!(translated.get("Server").unwrap(), "test");
+    }
+
+    #[test]
+    fn test_generate_call_tool_result_string_valid() {
+        let input = r#"{"Outcome": "success", "BackupSize": 2048}"#;
+        let result = PgmonetaHandler::generate_call_tool_result_string(input);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        // The output should be a JSON string with translated fields
+        let parsed: Map<String, Value> = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed.get("Outcome").unwrap(), "success");
+        assert_eq!(parsed.get("BackupSize").unwrap(), "2.00 KB");
     }
 }
