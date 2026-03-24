@@ -14,6 +14,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 mod info;
+mod retention;
 
 use super::compression::CompressionUtil;
 use super::configuration::CONFIG;

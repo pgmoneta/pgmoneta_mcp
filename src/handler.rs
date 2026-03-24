@@ -15,6 +15,7 @@
 
 pub mod hello;
 pub mod info;
+pub mod retention;
 
 use super::constant::*;
 use super::constant::{Command, Compression, Encryption};
@@ -49,6 +50,8 @@ impl PgmonetaHandler {
             .with_sync_tool::<hello::SayHelloTool>()
             .with_async_tool::<info::GetBackupInfoTool>()
             .with_async_tool::<info::ListBackupsTool>()
+            .with_async_tool::<retention::RetainBackupTool>()
+            .with_async_tool::<retention::ExpungeBackupTool>()
     }
 }
 
