@@ -1,5 +1,7 @@
 # pgmoneta MCP
 
+[![SafeSkill 82/100](https://img.shields.io/badge/SafeSkill-82%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/pgmoneta-pgmoneta-mcp)
+
 <p align="center">
   <img src="doc/images/logo-reversed-transparent.svg" alt="pgmoneta_mcp logo" width="256" />
 </p>
