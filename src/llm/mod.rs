@@ -87,7 +87,7 @@ pub enum LlmResponse {
 /// Trait defining the interface for an LLM client.
 ///
 /// Implementations of this trait handle communication with a specific LLM
-/// inference server (e.g., Ollama, vLLM, llama.cpp).
+/// inference server (e.g., Ollama, RamaLama, vLLM, or llama.cpp).
 #[allow(async_fn_in_trait)]
 pub trait LlmClient {
     /// Sends a conversation with available tool definitions to the LLM and returns its response.

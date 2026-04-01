@@ -19,7 +19,7 @@ For advanced installation methods (such as Docker or building from source), refe
 
 ### Download models
 
-Unlike `llama.cpp`, vLLM does not require you to manually hunt for `.gguf` files. It automatically pulls standard Hugging Face (Safetensor) model weights at runtime.
+vLLM does not require you to manually hunt for model files. It automatically pulls standard Hugging Face (Safetensor) model weights at runtime.
 
 You simply specify the Hugging Face repository ID (e.g., `ibm-granite/granite-3.0-8b-instruct`).
 

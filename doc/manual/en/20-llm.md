@@ -29,7 +29,7 @@ The overall flow looks like this:
 User prompt
     |
     v
-Local LLM runtime (Ollama or llama.cpp)
+Local LLM runtime (Ollama, RamaLama, vLLM or llama.cpp)
     |
     v
 pgmoneta_mcp tools
@@ -38,6 +38,19 @@ pgmoneta_mcp tools
 pgmoneta
 ```
 
+## Configuration
+
+Add an `[llm]` section to your `pgmoneta-mcp.conf` file to configure the runtime.
+
+### Configuration properties
+
+| Property | Default | Required | Description |
+| :------- | :------ | :------- | :---------- |
+| provider |  | Yes | The LLM provider backend (`ollama`, `llama.cpp`, `vLLM` or `ramalama`) |
+| endpoint |  | Yes | The URL of the LLM inference server |
+| model |  | Yes | The explicit model name to use for inference |
+| max_tool_rounds | 10 | No | Maximum tool-calling iterations per user prompt |
+
 ## Comparison
 
 When choosing a local runtime for **pgmoneta_mcp**, consider the following trade-offs
@@ -45,13 +58,13 @@ between ease of use and granular control.
 
 ### Runtime comparison
 
-| Feature | Ollama | llama.cpp | vLLM |
-| :--- | :--- | :--- | :--- |
-| **Installation** | Single binary / installer | Download or build binary | Python package (pip) |
-| **Model Management** | Built-in CLI (`pull`, `list`) | Manual download of `.gguf` files | Auto-downloads Safetensors |
-| **Ease of Use** | High (recommended for beginners) | Advanced (manual configuration) | Intermediate |
-| **Control** | Automatic hardware detection | Granular threading/GPU/RAM control | High-throughput optimizations |
-| **Performance** | Excellent (balanced) | Maximum (optimized for specific hardware) | Production-grade throughput |
+| Feature | Ollama | RamaLama | llama.cpp | vLLM |
+| :--- | :--- | :--- | :--- | :--- |
+| **Installation** | Single binary / installer | System package (dnf/pip) | Download or build binary | Python package (pip) |
+| **Model Management** | Built-in CLI (`pull`, `list`) | Automatic (OCI/HF registry) | Manual download of `.gguf` files | Auto-downloads Safetensors |
+| **Ease of Use** | High (recommended for beginners) | High (container-based) | Advanced (manual configuration) | Intermediate |
+| **Control** | Automatic hardware detection | Container-native isolation | Granular threading/GPU/RAM control | High-throughput optimizations |
+| **Performance** | Excellent (balanced) | Excellent (flexibility) | Maximum (optimized for specific hardware) | Production-grade throughput |
 
 ### Pros and Cons
 
@@ -99,7 +112,21 @@ between ease of use and granular control.
 * **Python dependency stack**: Installation pulls down heavy dependencies (like PyTorch and CUDA bindings) unless managed firmly via virtual environments or Docker.
 * **Lacks low-end quantization**: Not designed for hyper-compressed formats (like `Q2_K`) frequently used to squeeze models onto low-end hardware.
 
-## Recommended models
+**RamaLama**
+
+**Pros:**
+
+* **Container-native isolation**: Provides excellent reproducibility and environment security through Podman/Docker.
+* **Unified AI gateway**: Can pull models from any OCI-compliant registry or Hugging Face.
+* **Inference flexibility**: Supports multiple backends (like `vLLM` or `MLX`) through a single interface.
+* **Standardized**: Built from the ground up to be OpenAI-compatible.
+
+**Cons:**
+
+* **External dependency**: Requires a container engine to be installed and running.
+* **Container knowledge**: Slightly steeper learning curve for users unfamiliar with containers.
+
+## Model Selection
 
 When choosing an LLM for **pgmoneta_mcp**, keep these key concepts in mind regardless of which provider you choose:
 
@@ -108,7 +135,7 @@ When choosing an LLM for **pgmoneta_mcp**, keep these key concepts in mind regar
 
 ### Understanding model names
 
-Whether you are pulling a model via Ollama or downloading a `.gguf` file for `llama.cpp`, the model name usually encodes its size and compression level:
+Whether you are pulling a model via Ollama or RamaLama, or downloading a `.gguf` file for `llama.cpp`, the model name usually encodes its size and compression level:
 
 ``` text
 Qwen2.5-7B-Instruct-Q4_K_M
@@ -133,22 +160,20 @@ Start with a `7B` or `8B` model as a baseline. If the model repeatedly calls wro
 
 Models are compressed ("quantized") to reduce memory usage. The `Q` suffix indicates the compression level. `Q4_K_M` (4-bit quantization) is the recommended starting point for most setups — it uses roughly half the RAM of an uncompressed model with only a minor drop in reasoning quality.
 
-### Verified models
+### Model Compatibility Matrix
 
-The following models are verified for tool-calling performance. Sizes are based on the recommended Q4 quantization.
+The model must support **tool calling** (function calling) to work with pgmoneta MCP tools.
 
-| Model | Size (Disk) | RAM Needed | Performance |
-| :---- | :--- | :--------- | :---- |
-| Qwen 2.5 (0.5B) | ~0.4 GB | ~1 GB | Minimal footprint |
-| Llama 3.2 (3B) | ~2.0 GB | ~4 GB | Fast and lightweight |
-| Qwen 2.5 (3B) | ~1.9 GB | ~4 GB | High speed, decent quality |
-| Llama 3.1 (8B) | ~4.7 GB | ~8 GB | Balanced default choice |
-| Qwen 2.5 (7B) | ~4.7 GB | ~8 GB | Excellent tool-calling accuracy |
-| Mistral (7B) | ~4.1 GB | ~8 GB | Solid general-purpose model |
-| Mixtral (8x7B) | ~26.0 GB | ~32 GB | High quality, high hardware cost |
+| Model | Size | RAM Needed | Ollama | RamaLama | llama.cpp | vLLM | Notes |
+| :---- | :--- | :--------- | :----- | :------- | :-------- | :--- | :---- |
+| `granite-code` | ~5.0 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | **Recommended**. Built for coding and tool-calling |
+| `llama3.1:8b` | ~4.7 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | Best balance of capability and size |
+| `llama3.2:3b` | ~2.0 GB | ~4 GB | Yes | Yes | Yes (GGUF) | Yes | Lightweight option for limited hardware |
+| `qwen2.5:7b` | ~4.7 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | Excellent tool calling capabilities |
+| `mistral:7b` | ~4.1 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | Strong performance for open-source models |
 
-Examples of provider-specific model names can be found in the Ollama, llama.cpp, and vLLM sections below.
+Examples of provider-specific model names can be found in the Ollama, RamaLama, llama.cpp, and vLLM sections.
 
 ## Next step
 
-The next chapters document the recommended local runtimes: **Ollama**, **llama.cpp**, and **vLLM**, including installation, model setup, and configuration.
+The following sections document the recommended local runtimes: **Ollama**, **RamaLama**, **llama.cpp**, and **vLLM**, including installation, model setup, and configuration.

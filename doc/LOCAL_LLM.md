@@ -8,7 +8,7 @@ implementation details.
 
 This guide covers:
 
-* Installing Ollama, llama.cpp, or vLLM
+* Installing Ollama, RamaLama, llama.cpp, or vLLM
 * Downloading and validating a model
 * Configuring the `[llm]` section in `pgmoneta-mcp.conf`
 
@@ -20,146 +20,112 @@ When choosing an LLM for **pgmoneta_mcp**, keep these key concepts in mind regar
 2. **Quantization**: Models are compressed ("quantized") to fit into consumer hardware. The default standard is **Q4** (4-bit quantization), which provides an excellent balance of speed, size, and reasoning quality.
 3. **Hardware Limits**: The model's listed file size indicates the *minimum* RAM needed simply to load its weights. Actual runtime usage will be 20-30% higher because the runtime allocates memory for context caching and inference buffers.
 
-## Ollama
-
-[Ollama](https://ollama.com) is the recommended provider for running open-source models locally.
-It provides a simple CLI and API for downloading, managing, and serving LLM models.
-
-### Install
-
-To install Ollama, follow instructions at [ollama.com/download](https://ollama.com/download).
-
-### Verify installation
-
-```
-ollama --version
-```
-
-### Start the Ollama server
-
-Ollama runs as a background service. Start it with
-
-```
-ollama serve
-```
-
-On Linux with systemd, it may already be running as a service after installation.
-
-Verify it is running
-
-```
-curl http://localhost:11434/
-```
-
-This should print `Ollama is running`.
-
-### Download models
-
-Models must be downloaded before they can be used. This is the only step that requires
-network access. Once downloaded, models are cached locally and work fully offline.
-
-* Pull a model
-
-    ```
-    ollama pull llama3.1
-    ```
-
-* List downloaded models
-
-    ```
-    ollama list
-    ```
-
-* Test a model
-
-    ```
-    ollama run llama3.1 "Hello, what can you do?"
-    ```
-
-### Recommended models
+### Model Compatibility Matrix
 
 The model must support **tool calling** (function calling) to work with pgmoneta MCP tools.
 
-| Model | Size | RAM Needed | Tool Calling | Notes |
-| :---- | :--- | :--------- | :----------- | :---- |
-| `llama3.1:8b` | ~4.7 GB | ~8 GB | Yes | **Default**. Best balance of capability and size |
-| `llama3.2:3b` | ~2.0 GB | ~4 GB | Yes | Lightweight option for limited hardware |
-| `qwen2.5:0.5b` | ~0.4 GB | ~1 GB | Yes | Extremely lightweight |
-| `qwen2.5:3b` | ~1.9 GB | ~4 GB | Yes | Great balance of speed and capabilities |
-| `qwen2.5:7b` | ~4.7 GB | ~8 GB | Yes | Excellent tool calling capabilities |
-| `mistral:7b` | ~4.1 GB | ~8 GB | Yes | Strong performance for open-source models |
-| `mixtral:8x7b` | ~26.0 GB | ~32 GB | Yes | High quality MoE model |
+| Model | Size | RAM Needed | Ollama | RamaLama | llama.cpp | vLLM | Notes |
+| :---- | :--- | :--------- | :----- | :------- | :-------- | :--- | :---- |
+| `granite-code` | ~5.0 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | **Recommended**. Built for coding and tool-calling |
+| `llama3.1:8b` | ~4.7 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | Best balance of capability and size |
+| `llama3.2:3b` | ~2.0 GB | ~4 GB | Yes | Yes | Yes (GGUF) | Yes | Lightweight option for limited hardware |
+| `qwen2.5:7b` | ~4.7 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | Excellent tool calling capabilities |
+| `mistral:7b` | ~4.1 GB | ~8 GB | Yes | Yes | Yes (GGUF) | Yes | Strong performance for open-source models |
 
-### Check tool support
+## Ollama
 
-You can verify that a model supports tool calling
+[Ollama](https://ollama.com) is the recommended provider for running open-source models locally. It provides a simple CLI and API for downloading, managing, and serving LLM models.
 
-```
-ollama show llama3.1
-```
+### Basic Setup (Rocky Linux 10)
 
-Look for `tools` in the capabilities list. Alternatively, query the API
+Install Ollama using the official script:
 
-```
-curl -s http://localhost:11434/api/show -d '{"model": "llama3.1"}' | grep capabilities
+```sh
+curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-### Configuration
+Start the Ollama server as a background service:
 
-Add an `[llm]` section to your `pgmoneta-mcp.conf`:
+```sh
+ollama serve
+```
+
+Pull the recommended model:
+
+```sh
+ollama pull llama3.1:8b
+```
+
+### pgmoneta-mcp.conf Example
 
 ```ini
 [llm]
 provider = ollama
 endpoint = http://localhost:11434
-model = llama3.1
+model = llama3.1:8b
 max_tool_rounds = 10
 ```
 
 ## llama.cpp
 
-[llama.cpp](https://github.com/ggml-org/llama.cpp) provides direct control over hardware for running LLMs locally.
+[llama.cpp](https://github.com/ggml-org/llama.cpp) provides direct control over hardware and inference settings for running LLMs locally.
 
-### Install
+### Basic Setup (Rocky Linux 10)
 
-Download the `llama-server` binary from the [releases page](https://github.com/ggml-org/llama.cpp/releases).
+You must download the `llama-server` binary and the model file manually. 
 
-### Download models
-
-Download a `.gguf` model file from a source such as [Hugging Face](https://huggingface.co/). Search for a model name followed by `GGUF` to find the right repository (e.g. `Qwen2.5-7B-Instruct GGUF`).
-
-For **pgmoneta_mcp**, the following specific files are suitable choices:
-
-| Model file | Size | RAM needed | Notes |
-| :--------- | :--- | :--------- | :---- |
-| `Qwen2.5-7B-Instruct-Q4_K_M.gguf` | ~4.7 GB | ~8 GB | Strong tool calling accuracy |
-| `Qwen2.5-3B-Instruct-Q4_K_M.gguf` | ~1.9 GB | ~4 GB | Lower hardware requirement, some accuracy trade-off |
-| `Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf` | ~4.7 GB | ~8 GB | Widely used, good general reasoning |
-
-### Start the server
-
+```sh
+dnf install wget
 ```
+
+Download the latest `llama-server` from the [official releases](https://github.com/ggml-org/llama.cpp/releases), and download a `.gguf` model file from Hugging Face (e.g., `Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf`).
+
+Start the server:
+
+```sh
 llama-server \
   --model models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf \
   --port 8080 \
   --ctx-size 8192
 ```
 
-Verify it is running:
-
-```
-curl http://localhost:8080/health
-```
-
-### Configuration
-
-Add an `[llm]` section to your `pgmoneta-mcp.conf`:
+### pgmoneta-mcp.conf Example
 
 ```ini
 [llm]
 provider = llama.cpp
 endpoint = http://localhost:8080
-model = Meta-Llama-3.1-8B-Instruct-Q4_K_M
+model = Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
+max_tool_rounds = 10
+```
+
+## RamaLama
+
+[RamaLama](https://ramalama.ai) is an open-source command-line interface and unified AI gateway that simplifies the deployment and inference of AI models using containerization (Podman or Docker).
+
+### Basic Setup (Rocky Linux 10)
+
+It is available natively on RPM-based distributions:
+
+```sh
+dnf install ramalama
+```
+
+RamaLama handles pulling models automatically. Start the server for the recommended model:
+
+```sh
+ramalama serve granite-code
+```
+
+The default endpoint is `http://localhost:8080`.
+
+### pgmoneta-mcp.conf Example
+
+```ini
+[llm]
+provider = ramalama
+endpoint = http://localhost:8080
+model = granite-code
 max_tool_rounds = 10
 ```
 
@@ -191,9 +157,7 @@ Verify it is running:
 curl http://localhost:8000/v1/models
 ```
 
-### Configuration
-
-Add an `[llm]` section to your `pgmoneta-mcp.conf`:
+### pgmoneta-mcp.conf Example
 
 ```ini
 [llm]
@@ -207,33 +171,38 @@ max_tool_rounds = 10
 
 | Property | Default | Required | Description |
 | :------- | :------ | :------- | :---------- |
-| provider |  | Yes | The LLM provider backend (`ollama`, `llama.cpp` or `vllm`) |
+| provider |  | Yes | The LLM provider backend (`ollama`, `llama.cpp`, `ramalama` or `vllm`) |
 | endpoint |  | Yes | The URL of the LLM inference server |
 | model |  | Yes | The model name to use for inference |
 | max_tool_rounds | 10 | No | Maximum tool-calling iterations per user prompt |
 
-### Quick verification
+## Quick verification
 
-1. Confirm your runtime is running:
+1. Confirm your LLM server is running:
 
-    For Ollama:
-    ```
-    curl http://localhost:11434/
-    ```
+For **Ollama**:
+```sh
+curl http://localhost:11434/
+```
 
-    For llama.cpp:
-    ```
-    curl http://localhost:8080/health
-    ```
+For **llama.cpp**:
+```sh
+curl http://localhost:8080/health
+```
 
-    For vLLM:
-    ```
-    curl http://localhost:8000/v1/models
-    ```
+For **RamaLama**:
+```sh
+curl http://localhost:8080/v1/models
+```
+
+For **vLLM**:
+```sh
+curl http://localhost:8000/v1/models
+```
 
 2. Start pgmoneta MCP with your config file:
 
-```
+```sh
 pgmoneta-mcp-server -c pgmoneta-mcp.conf -u pgmoneta-mcp-users.conf
 ```
 

@@ -18,6 +18,7 @@ Chen Shen <scisbeloved23@gmail.com>
 Nihal Kumar <collabwithnihal@gmail.com>
 Shikhar Soni <shikharish05@gmail.com>
 Sakshi Aggarwal <sakshiaggarwal2706@gmail.com>
+Sarthak Aneja <sarthakaneja260@gmail.com>
 ```
 
 ## Committers

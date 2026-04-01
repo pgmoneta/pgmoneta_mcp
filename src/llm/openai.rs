@@ -128,26 +128,39 @@ impl OpenAiClient {
     /// Checks whether the inference server is running and reachable.
     ///
     /// # Returns
-    /// `Ok(())` if the server responds to a basic `/health` endpoint, or an error.
+    /// `Ok(())` if the server responds to a basic `/health` or `/v1/models` endpoint, or an error.
     pub async fn health_check(&self) -> anyhow::Result<()> {
-        let url = format!("{}/health", self.endpoint);
-        let resp = self.http_client.get(&url).send().await.map_err(|e| {
-            anyhow!(
-                "Cannot reach {} at {}: {}",
-                self.provider_name,
-                self.endpoint,
-                e
-            )
-        })?;
+        let health_url = format!("{}/health", self.endpoint);
+        let resp = self.http_client.get(&health_url).send().await;
 
-        if !resp.status().is_success() {
-            return Err(anyhow!(
-                "{} health check failed with status {}",
-                self.provider_name,
-                resp.status()
-            ));
+        match resp {
+            Ok(r) if r.status().is_success() => Ok(()),
+            _ => {
+                // Try /v1/models as a fallback (RamaLama/vLLM)
+                let models_url = format!("{}/v1/models", self.endpoint);
+                let resp = self
+                    .http_client
+                    .get(&models_url)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        anyhow!(
+                            "Cannot reach {} at {}: {}",
+                            self.provider_name,
+                            self.endpoint,
+                            e
+                        )
+                    })?;
+
+                if !resp.status().is_success() {
+                    return Err(anyhow!(
+                        "{} health check failed (tried /health and /v1/models)",
+                        self.provider_name,
+                    ));
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     /// Lists the models available on the server using the `/v1/models` endpoint.
