@@ -14,6 +14,10 @@ path = "src/bin/server.rs"
 name = "pgmoneta-mcp-admin"
 path = "src/bin/admin.rs"
 
+[[bin]]
+name = "pgmoneta-mcp-inspector"
+path = "src/bin/inspector/main.rs"
+
 [dependencies]
 tokio = {version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -61,10 +65,14 @@ serde_ini = "0.2.0"
 tracing-appender = "0.2.4"
 syslog-tracing = "0.3.1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-
+inquire = "0.9.4"
+treelog = { version = "0.0.6", features = ["arbitrary-json"] }
 [target.'cfg(windows)'.dependencies]
 winlog2 = "0.3.2"
 log = "0.4"
+
+[dev-dependencies]
+tempfile = "3.27.0"
 
 [[test]]
 name = "info_test"

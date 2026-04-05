@@ -125,6 +125,23 @@ pub struct LlmConfiguration {
     pub max_tool_rounds: usize,
 }
 
+/// Configuration properties for the inspector.
+///
+/// This corresponds to the `[inspector]` section in the inspector configuration file.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct InspectorConfiguration {
+    /// The URL of the MCP server.
+    pub url: String,
+    /// Connection timeout in seconds. Default: 30.
+    #[serde(default = "default_timeout")]
+    pub timeout: u64,
+}
+
+#[derive(Deserialize)]
+struct InspectorConfRoot {
+    pub inspector: InspectorConfiguration,
+}
+
 /// Loads the main configuration and user configuration from the specified file paths.
 ///
 /// The files are parsed as INI format and deserialized into the [`Configuration`] struct.
@@ -174,6 +191,31 @@ pub fn load_user_configuration(user_path: &str) -> anyhow::Result<UserConf> {
             e
         )
     })
+}
+
+/// Loads only the inspector configuration from the specified file path.
+///
+/// # Arguments
+///
+/// * `inspector_path` - The file path to the inspector configuration file.
+///
+/// # Returns
+///
+/// Returns a parsed [`InspectorConfiguration`] object, or an error if the file cannot be read or parsed.
+pub fn load_inspector_configuration(
+    inspector_path: &str,
+) -> anyhow::Result<InspectorConfiguration> {
+    let conf = Config::builder()
+        .add_source(config::File::with_name(inspector_path).format(FileFormat::Ini))
+        .build()?;
+    let root = conf.try_deserialize::<InspectorConfRoot>().map_err(|e| {
+        anyhow!(
+            "Error parsing inspector configuration at path {}: {:?}",
+            inspector_path,
+            e
+        )
+    })?;
+    Ok(root.inspector)
 }
 
 fn default_port() -> i32 {
@@ -245,4 +287,8 @@ fn default_compression() -> String {
 
 fn default_encryption() -> String {
     "aes_256_gcm".to_string()
+}
+
+fn default_timeout() -> u64 {
+    30
 }

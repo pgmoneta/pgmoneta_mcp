@@ -343,6 +343,48 @@ Parameter structs must derive:
 
 ---
 
+## MCP Inspector
+
+The `pgmoneta-mcp-inspector` is a command-line developer tool for testing and debugging the MCP server.
+It serves the same purpose as the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector), allowing you to list tools, call them, and inspect responses directly from the terminal.
+
+The built-in CLI inspector reads server connection details from a dedicated configuration file.
+
+Create `pgmoneta-mcp-inspector.conf`:
+
+```ini
+[inspector]
+url = http://localhost:8000/mcp
+timeout = 30
+```
+
+Run with the config file:
+
+```sh
+pgmoneta-mcp-inspector inspector -c pgmoneta-mcp-inspector.conf tool list
+```
+
+Example tool call:
+
+```sh
+pgmoneta-mcp-inspector inspector -c pgmoneta-mcp-inspector.conf tool call <tool_name_with_args> '{"key": "value"}'
+```
+
+```sh
+pgmoneta-mcp-inspector inspector -c pgmoneta-mcp-inspector.conf tool call <tool_name_without_args>
+```
+
+Interactive mode can be started explicitly or by running with no command:
+
+```sh
+pgmoneta-mcp-inspector interactive
+pgmoneta-mcp-inspector
+```
+
+For full CLI reference, see the **MCP Inspector** chapter.
+
+---
+
 ## Continuous Integration
 
 The project uses GitHub Actions for CI. The pipeline includes:
