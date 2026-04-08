@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+pub mod compression;
 pub mod conf;
 pub mod hello;
 pub mod info;
@@ -61,6 +62,8 @@ impl PgmonetaHandler {
             .with_async_tool::<conf::ConfGetTool>()
             .with_async_tool::<conf::ConfSetTool>()
             .with_async_tool::<mode::SetModeTool>()
+            .with_async_tool::<compression::CompressFileTool>()
+            .with_async_tool::<compression::DecompressFileTool>()
     }
 }
 
