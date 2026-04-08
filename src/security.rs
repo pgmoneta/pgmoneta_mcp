@@ -654,7 +654,7 @@ impl SecurityUtil {
 
         let (scram, client_final) = scram.client_final();
         let mut client_final_msg = Vec::new();
-        let size = 1 + 4 + client_final.len();
+        let size = 4 + client_final.len();
         client_final_msg.write_u8(b'p').await?;
         client_final_msg.write_i32(size as i32).await?;
         client_final_msg.write_all(client_final.as_bytes()).await?;
