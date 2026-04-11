@@ -192,17 +192,14 @@ impl PgmonetaHandler {
                 }
             } else if object_arr_fields.contains(&key.as_str()) {
                 let mut trans_arr: Vec<Value> = Vec::new();
-                if value.as_array().is_none() {
-                    trans_res.insert(key.clone(), value.clone());
-                    continue;
-                }
-                let arr = value.as_array().unwrap();
-                for item in arr {
-                    if let Value::Object(object) = item {
-                        let trans_obj = Self::_translate_result(object)?;
-                        trans_arr.push(Value::Object(trans_obj));
-                    } else {
-                        trans_arr.push(item.clone())
+                if let Some(arr) = value.as_array() {
+                    for item in arr {
+                        if let Value::Object(object) = item {
+                            let trans_obj = Self::_translate_result(object)?;
+                            trans_arr.push(Value::Object(trans_obj));
+                        } else {
+                            trans_arr.push(item.clone())
+                        }
                     }
                 }
                 trans_res.insert(key.clone(), Value::from(trans_arr));
