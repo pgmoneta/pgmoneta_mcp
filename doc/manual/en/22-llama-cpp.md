@@ -105,3 +105,10 @@ pgmoneta-mcp-server -c pgmoneta-mcp.conf -u pgmoneta-mcp-users.conf
 ```
 
 Open your MCP client and ask a question about your backups to verify end-to-end setup.
+
+
+### Using llama.cpp Web UI
+
+
+1. Use the URL of the llama server `http://localhost:8080` in your browser. If the page is already open, refresh it.
+2. Open the Web UI settings, select `MCP`, click `Add New Server`, and enter the pgmoneta-mcp URL. If a pgmoneta-mcp server entry exists, delete it and add it again.

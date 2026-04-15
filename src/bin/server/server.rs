@@ -20,6 +20,8 @@ use pgmoneta_mcp::logging::Logger;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpService, session::local::LocalSessionManager,
 };
+use std::time::Duration;
+use tower_http::cors::{Any, CorsLayer};
 
 const BIND_ADDRESS: &str = "0.0.0.0";
 
@@ -67,7 +69,16 @@ async fn main() -> anyhow::Result<()> {
         Default::default(),
     );
 
-    let router = axum::Router::new().nest_service("/mcp", handler);
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .expose_headers(Any)
+        .max_age(Duration::from_secs(86400));
+
+    let router = axum::Router::new()
+        .nest_service("/mcp", handler)
+        .layer(cors);
     let tcp_listener = tokio::net::TcpListener::bind(&address).await?;
 
     configuration::CONFIG

@@ -1755,6 +1755,7 @@ dependencies = [
  "syslog-tracing",
  "tempfile",
  "tokio",
+ "tower-http",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

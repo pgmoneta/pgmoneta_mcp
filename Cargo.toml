@@ -46,6 +46,7 @@ tracing-subscriber = { version = "0.3.23", features = [
     "chrono"
 ] }
 axum = { version = "0.8.8", features = ["macros"] }
+tower-http = { version = "0.6", features = ["cors"] }
 config = { version = "0.15.22", features = ["yaml"] }
 base64 = "0.22.1"
 home = "0.5.12"
