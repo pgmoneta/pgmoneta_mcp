@@ -426,7 +426,11 @@ ci_install_utilities() {
     fi
 
     dnf update -y
-    dnf install -y cargo nmap-ncat git gcc clang cmake make
+    if command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
+        dnf install -y nmap-ncat git gcc clang cmake make
+    else
+        dnf install -y cargo nmap-ncat git gcc clang cmake make
+    fi
 
     # pgmoneta source build requires libev headers; install by pkg-config provide first.
     if ! dnf install -y libev 'pkgconfig(libev)'; then
