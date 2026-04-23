@@ -88,6 +88,7 @@ jobs:
       options: --privileged -v /var/run/docker.sock:/var/run/docker.sock
     steps:
     - uses: actions/checkout@v4
+    - uses: Swatinem/rust-cache@v2
     - name: Run integration tests
       run: |
         set -o pipefail
