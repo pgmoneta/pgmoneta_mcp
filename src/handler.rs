@@ -21,6 +21,7 @@ pub mod info;
 pub mod mode;
 pub mod retention;
 pub mod shutdown;
+pub mod status;
 pub mod verify;
 
 use super::constant::*;
@@ -60,6 +61,8 @@ impl PgmonetaHandler {
             .with_async_tool::<conf::ConfGetTool>()
             .with_async_tool::<conf::ConfSetTool>()
             .with_async_tool::<mode::SetModeTool>()
+            .with_async_tool::<status::GetStatusTool>()
+            .with_async_tool::<status::GetStatusDetailsTool>()
             .with_async_tool::<compression::CompressFileTool>()
             .with_async_tool::<compression::DecompressFileTool>()
             .with_async_tool::<encryption::EncryptFileTool>()

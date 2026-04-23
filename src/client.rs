@@ -21,6 +21,7 @@ mod info;
 mod mode;
 mod retention;
 mod shutdown;
+mod status;
 mod verify;
 
 use super::compression::CompressionUtil;
