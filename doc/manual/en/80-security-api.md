@@ -264,7 +264,7 @@ pub async fn connect_to_server(
 ```rust
 let stream = SecurityUtil::connect_to_server(
     "localhost",
-    2345,
+    5000,
     "admin",
     "admin_password"
 ).await?;
@@ -397,7 +397,7 @@ chmod 600 /path/to/pgmoneta-mcp.conf
 #### Network Security
 
 1. **TLS/SSL**: Consider using TLS for pgmoneta connections in production
-2. **Firewall**: Restrict access to pgmoneta port (typically 2345)
+2. **Firewall**: Restrict access to pgmoneta port (typically 5000)
 3. **Authentication**: Always use SCRAM-SHA-256 (never trust authentication)
 4. **Monitoring**: Monitor authentication failures and suspicious activity
 

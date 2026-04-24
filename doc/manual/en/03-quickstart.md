@@ -5,17 +5,15 @@
 Make sure that [**pgmoneta_mcp**][pgmoneta_mcp] is installed and in your path by using `pgmoneta-mcp-server --help`. You should see
 
 ``` console
-pgmoneta-mcp-server 0.2.0
-  MCP server for pgmoneta
+A Model Context Protocol (MCP) server for pgmoneta, backup/restore tool for PostgreSQL
 
-Usage:
-  pgmoneta-mcp-server [OPTIONS]
+Usage: pgmoneta-mcp-server [OPTIONS]
 
 Options:
-  -c, --config <CONFIG>  Path to configuration file [default: /etc/pgmoneta-mcp/pgmoneta-mcp.conf]
-  -u, --users <USERS>    Path to users file [default: /etc/pgmoneta-mcp/pgmoneta-mcp-users.conf]
-  -h, --help             Print help
-  -V, --version          Print version
+  -c, --conf <CONF>    Path to pgmoneta MCP configuration file [default: /etc/pgmoneta-mcp/pgmoneta-mcp.conf]
+  -u, --users <USERS>  Path to pgmoneta MCP users configuration file [default: /etc/pgmoneta-mcp/pgmoneta-mcp-users.conf]
+  -h, --help           Print help
+  -V, --version        Print version
 ```
 
 If you encounter any issues following the above steps, you can refer to the **Installation** chapter to see how to install or compile pgmoneta_mcp on your system.
@@ -64,7 +62,7 @@ Add an admin user to pgmoneta_mcp. This should be the same user you configured i
 pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin user add
 ```
 
-You will be prompted for the password. Alternatively, use the `-P` flag or `PGMONETA_PASSWORD` environment variable:
+You will be prompted for the password. Alternatively, use the `-P` flag:
 
 ``` sh
 pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin -P secretpassword user add
@@ -95,12 +93,16 @@ port = 5000
 **Configuration options**:
 
 - `port`: Port where the MCP server will listen (default: 8000)
-- `log_type`: Logging destination - `file`, `console`, or `syslog`
-- `log_level`: Log level - `trace`, `debug`, `info`, `warn`, or `error`
+- `log_type`: Logging destination - `file`, `console`, or `syslog` (default: `console`)
+- `log_level`: Log level - `trace`, `debug`, `info`, `warn`, or `error` (default: `info`)
 - `log_path`: Path to log file (when `log_type = file`)
+- `log_mode`: Append to or create the log file - `append` or `create` (default: `append`)
+- `log_rotation_age`: Log rotation interval - `0` (never), `m` (minutely), `h` (hourly), `d` (daily), or `w` (weekly) (default: `0`)
 - `[pgmoneta]` section:
   - `host`: Hostname where pgmoneta server is running
   - `port`: Management port of pgmoneta server (must match pgmoneta's `management` setting)
+  - `compression`: Compression algorithm for MCP ↔ pgmoneta communication - `none`, `gzip`, `zstd`, `lz4`, or `bzip2` (default: `zstd`)
+  - `encryption`: Encryption algorithm for MCP ↔ pgmoneta communication - `none`, `aes_256_gcm`, `aes_192_gcm`, or `aes_128_gcm` (default: `aes_256_gcm`)
 
 See the **Configuration** chapter for all configuration options.
 
@@ -123,23 +125,18 @@ The server can be stopped by pressing Ctrl-C (`^C`) in the console where you sta
 You can see the commands it supports by using `pgmoneta-mcp-admin --help` which will give:
 
 ``` console
-pgmoneta-mcp-admin 0.2.0
-  Administration utility for pgmoneta_mcp
+Administration utility for pgmoneta-mcp
 
-Usage:
-  pgmoneta-mcp-admin [OPTIONS] <COMMAND>
+Usage: pgmoneta-mcp-admin [OPTIONS] <COMMAND>
 
 Commands:
-  user        Manage users
-  help        Print this message or the help of the given subcommand(s)
+  user  Manage a specific user
+  help  Print this message or the help of the given subcommand(s)
 
 Options:
-  -f, --file <FILE>          Path to users file
-  -U, --user <USER>          Username
-  -P, --password <PASSWORD>  Password
-  -g, --generate             Generate a password
-  -l, --length <LENGTH>      Password length [default: 64]
-  -F, --format <FORMAT>      Output format (text or json) [default: text]
+  -f, --file <FILE>          The user configuration file
+  -U, --user <USER>          The user name
+  -P, --password <PASSWORD>  The password for the user
   -h, --help                 Print help
   -V, --version              Print version
 ```
@@ -163,22 +160,10 @@ chmod 600 ~/.pgmoneta-mcp/master.key
 pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin user add
 ```
 
-**Add a user with generated password**:
-
-``` sh
-pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin -g user add
-```
-
 **List all users**:
 
 ``` sh
 pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf user ls
-```
-
-**List users in JSON format**:
-
-``` sh
-pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -F json user ls
 ```
 
 **Edit a user's password**:
@@ -193,64 +178,142 @@ pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin user edit
 pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin user del
 ```
 
-## Connecting MCP Clients
+### Browser-based MCP Clients
 
-### VS Code with GitHub Copilot
+The MCP server includes built-in CORS (Cross-Origin Resource Sharing) support, so browser-based MCP clients can connect directly without a proxy. Point any web-based MCP client to the server endpoint (e.g., `http://localhost:8000/mcp`).
 
-**Prerequisites**:
-- VS Code installed
-- GitHub Copilot extension installed
+See the [llama.cpp](22-llama-cpp.md) chapter for a step-by-step Web UI example.
 
-**Add the server**:
+## Using the Client
 
-1. Open the Command Palette in VS Code (F1 or Ctrl+Shift+P)
-2. Type "MCP: Add Server"
-3. Configure your server with the following settings:
-   - Name: `pgmoneta`
-   - URL: `http://localhost:8000/mcp` (adjust host/port as needed)
+[**pgmoneta_mcp**][pgmoneta_mcp] provides a built-in interactive client to execute tools and interact with the server.
 
-**Start the server**:
+Start the client by running:
 
-1. Go to the Extensions tab
-2. Find your pgmoneta MCP server
-3. Click the gear icon
-4. Choose "Start Server"
+``` sh
+pgmoneta-mcp-client -c pgmoneta-mcp-client.conf -u pgmoneta-mcp-users.conf
+```
 
-**Use the server**:
+The client reads its connection settings from a dedicated configuration file.
+See the **pgmoneta-mcp-client** chapter for all client configuration options.
 
-Open a chat (Ctrl + Alt + I) and try:
-- "Say hello to the pgmoneta MCP server"
-- "Get information about the latest backup for server primary"
+By default, the client runs in "User mode", which allows you to interact with pgmoneta using natural language, provided you have configured an LLM (see "Using a local LLM" below). 
+
+For example, you can try:
 - "List all backups for server primary"
+- "Get information about the latest backup for server primary"
 
-### Claude Desktop
+If you don't have an LLM configured, or if you prefer to see raw JSON outputs, you can switch to developer mode:
 
-Add the following to your Claude Desktop configuration file:
+``` console
+> /developer
+Switched to developer mode.
+> list_backups {"server": "primary"}
+```
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-**Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-``` json
+```json
 {
-  "mcpServers": {
-    "pgmoneta": {
-      "url": "http://localhost:8000/mcp"
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "list-backup",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260424162246
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0059"
+    },
+    "Request": {
+        "Server": "primary",
+        "Sort": "asc"
+    },
+    "Response": {
+        "Backups": [
+            {
+                "Backup": 20260424094135,
+                "BackupSize": "8.30 MB",
+                "BiggestFileSize": "328.00 KB",
+                "Comments": "",
+                "Compression": "zstd",
+                "Encryption": "aes_256_gcm",
+                "Incremental": false,
+                "IncrementalParent": "",
+                "Keep": false,
+                "RestoreSize": "8.29 MB",
+                "Server": "primary",
+                "Valid": 1,
+                "WAL": 0
+            }
+        ],
+        "MajorVersion": 18,
+        "MinorVersion": 3,
+        "NumberOfBackups": 1,
+        "Server": "primary",
+        "ServerVersion": "0.21.0"
     }
-  }
 }
 ```
 
-Restart Claude Desktop and the pgmoneta tools will be available.
+``` console
+> get_backup_info {"server": "primary", "backup_id": "latest"}
+```
+
+```json
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "info",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260424200750
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0062"
+    },
+    "Request": {
+        "Backup": "latest",
+        "Server": "primary"
+    },
+    "Response": {
+        "Backup": 20260424094452,
+        "BackupSize": "5.29 MB",
+        "BiggestFileSize": "328.00 KB",
+        "CheckpointHiLSN": "0x0",
+        "CheckpointLoLSN": "0x22000080",
+        "Comments": "",
+        "Compression": "zstd",
+        "Elapsed": 0.0,
+        "Encryption": "aes_256_gcm",
+        "EndHiLSN": "0x0",
+        "EndLoLSN": "0x22000120",
+        "EndTimeline": 1,
+        "Keep": false,
+        "MajorVersion": 18,
+        "MinorVersion": 3,
+        "NumberOfTablespaces": 0,
+        "RestoreSize": "8.29 MB",
+        "Server": "primary",
+        "ServerVersion": "0.21.0",
+        "StartHiLSN": "0x0",
+        "StartLoLSN": "0x22000028",
+        "StartTimeline": 1,
+        "Tablespaces": {},
+        "Valid": 1,
+        "WAL": "000000010000000000000022"
+    }
+}
+```
 
 ## Using a local LLM
 
 You can also pair **pgmoneta_mcp** with a local LLM runtime for a fully local,
 tool-driven assistant workflow.
 
-Add an `[llm]` section to `pgmoneta-mcp.conf`:
+Add an `[llm]` section to the **client** configuration file (`pgmoneta-mcp-client.conf`):
 
 ``` ini
 [llm]
@@ -259,6 +322,9 @@ endpoint = http://localhost:11434
 model = llama3.1
 max_tool_rounds = 10
 ```
+
+The same `[llm]` section can also be added to the server configuration file
+(`pgmoneta-mcp.conf`).
 
 See the **Local LLM** and **Ollama** chapters in the [manual](https://github.com/pgmoneta/pgmoneta/tree/main/doc/manual/en) for the full setup,
 including model selection, validation, and configuration details.
@@ -279,13 +345,7 @@ pgmoneta-cli -c pgmoneta.conf status
 tail -f /tmp/pgmoneta_mcp.log
 ```
 
-3. **Test MCP connection** (from your MCP client):
-   - Ask: "Say hello to the pgmoneta MCP server"
-   - Expected response: "Hello from pgmoneta MCP server!"
-
-4. **Test backup query** (from your MCP client):
-   - Ask: "Get information about the latest backup for server primary"
-   - Expected: Detailed backup information in JSON format
+   Look for the `Starting MCP server at` line confirming the server is listening.
 
 ## Troubleshooting
 

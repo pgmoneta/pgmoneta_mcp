@@ -611,9 +611,12 @@ CONFIG.set(config).expect("Configuration already initialized");
 
 `pgmoneta-mcp.conf`:
 ```ini
+[pgmoneta_mcp]
+port = 8000
+
 [pgmoneta]
 host = localhost
-port = 2345
+port = 5000
 ```
 
 `pgmoneta-mcp-users.conf`:
@@ -696,10 +699,10 @@ pub async fn connect_to_server_tls(
 
 Enable debug logging to see detailed client operations:
 
-**Configuration**:
+**Configuration** (in `pgmoneta-mcp.conf`):
 ```ini
-[log]
-level = debug
+[pgmoneta_mcp]
+log_level = debug
 ```
 
 **Debug output**:

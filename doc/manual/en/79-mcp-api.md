@@ -104,21 +104,6 @@ struct RequestHeader {
 
 ### Available MCP Tools
 
-#### say_hello
-
-**Description**: Simple ping tool to verify MCP server connectivity.
-
-**Parameters**: None
-
-**Returns**: Greeting message
-
-**Example**:
-```json
-{
-  "tool": "say_hello"
-}
-```
-
 #### get_backup_info
 
 **Description**: Retrieves detailed information about a specific backup.
@@ -159,7 +144,7 @@ struct RequestHeader {
     "BackupSize": "1.2 GB",
     "RestoreSize": "1.5 GB",
     "Compression": "zstd",
-    "Encryption": "aes-256-cbc",
+    "Encryption": "aes_256_gcm",
     "StartHiLSN": "0x1A2B3C4D",
     "StartLoLSN": "0x5E6F7890",
     ...
@@ -200,7 +185,7 @@ struct RequestHeader {
       "BackupSize": "1.2 GB",
       "RestoreSize": "1.5 GB",
       "Compression": "zstd",
-      "Encryption": "aes-256-cbc"
+      "Encryption": "aes_256_gcm"
     },
     ...
   ]
@@ -238,12 +223,9 @@ Numeric enum values are translated to descriptive strings:
 
 **Encryption types**:
 - `0` → `"none"`
-- `1` → `"aes-256-cbc"`
-- `2` → `"aes-192-cbc"`
-- `3` → `"aes-128-cbc"`
-- `4` → `"aes-256-ctr"`
-- `5` → `"aes-192-ctr"`
-- `6` → `"aes-128-ctr"`
+- `1` → `"aes_256_gcm"`
+- `2` → `"aes_192_gcm"`
+- `3` → `"aes_128_gcm"`
 
 **Error codes**:
 - `0` → `"Success"`
@@ -291,14 +273,15 @@ The MCP server requires two configuration files:
 
 **pgmoneta-mcp.conf**:
 ```ini
+[pgmoneta_mcp]
+port = 8000
+log_type = file
+log_level = info
+log_path = /tmp/pgmoneta-mcp.log
+
 [pgmoneta]
 host = localhost
-port = 2345
-
-[log]
-type = file
-level = info
-path = /tmp/pgmoneta-mcp.log
+port = 5000
 ```
 
 **pgmoneta-mcp-users.conf**:
@@ -319,7 +302,7 @@ pgmoneta-mcp-server -c pgmoneta-mcp.conf -u pgmoneta-mcp-users.conf
 **MCP client interaction** (pseudo-code):
 ```python
 # Connect to MCP server
-client = MCPClient("http://localhost:8080/mcp")
+client = MCPClient("http://localhost:8000/mcp")
 
 # Initialize connection
 client.initialize()
@@ -388,10 +371,10 @@ impl Command {
 
 Enable debug logging to see detailed request/response information:
 
-**In configuration**:
+**In configuration** (`pgmoneta-mcp.conf`):
 ```ini
-[log]
-level = debug
+[pgmoneta_mcp]
+log_level = debug
 ```
 
 **Debug output includes**:
@@ -423,6 +406,7 @@ DEBUG Translated backup size: 1234567890 -> "1.2 GB"
 - **Password encryption**: All passwords are encrypted at rest using AES-256-GCM
 - **SCRAM-SHA-256**: Strong authentication mechanism prevents password sniffing
 - **Admin-only access**: Only configured admin users can access pgmoneta operations
+- **CORS support**: The HTTP server allows cross-origin requests so that browser-based MCP clients can connect directly
 - **Audit logging**: All operations are logged with username and timestamp
 
 ### References

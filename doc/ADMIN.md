@@ -3,24 +3,20 @@
 The **pgmoneta-mcp-admin** command line interface manages your users for [**pgmoneta-mcp**](https://github.com/pgmoneta/pgmoneta-mcp).
 
 ```
-pgmoneta-mcp-admin
-  Administration utility for pgmoneta-mcp
+Administration utility for pgmoneta-mcp
 
-Usage:
-  pgmoneta-mcp-admin [OPTIONS] [COMMAND]
+Usage: pgmoneta-mcp-admin [OPTIONS] <COMMAND>
+
+Commands:
+  user  Manage a specific user
+  help  Print this message or the help of the given subcommand(s)
 
 Options:
   -f, --file <FILE>          The user configuration file
   -U, --user <USER>          The user name
   -P, --password <PASSWORD>  The password for the user
-  -g, --generate             Generate a password
-  -l, --length <LENGTH>      Password length (default: 64, ignored when --generate is not set) [default: 64]
-  -F, --format <FORMAT>      Output format [default: text] [possible values: text, json]
   -h, --help                 Print help
   -V, --version              Print version
-
-Commands:
-  user        Manage a specific user
 ```
 
 Before you add or edit users, copy the pgmoneta master key into the MCP home

@@ -20,6 +20,10 @@ The pgmoneta MCP server is designed as a secure bridge between MCP clients and t
                           +--------------+
 ```
 
+Browser-based MCP clients (e.g., llama.cpp Web UI) connect over HTTP.
+The server uses an axum HTTP router with a CORS layer so that
+cross-origin requests from web clients are accepted without a proxy.
+
 ### Communication Flow
 
 1. **Authentication Phase**: The MCP server uses SCRAM-SHA-256 to authenticate with the pgmoneta server

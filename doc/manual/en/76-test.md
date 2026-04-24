@@ -298,7 +298,7 @@ Increase timeout or check if pgmoneta server is running:
 ps aux | grep pgmoneta
 
 # Check if port is listening
-netstat -tuln | grep 2345
+netstat -tuln | grep 5000
 ```
 
 #### Tests Fail with "Connection refused"

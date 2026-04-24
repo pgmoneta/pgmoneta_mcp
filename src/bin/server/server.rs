@@ -28,7 +28,8 @@ const BIND_ADDRESS: &str = "0.0.0.0";
 #[derive(Debug, Parser)]
 #[command(
     name = "pgmoneta-mcp",
-    about = "A Model Context Protocol (MCP) server for pgmoneta, backup/restore tool for PostgreSQL"
+    about = "A Model Context Protocol (MCP) server for pgmoneta, backup/restore tool for PostgreSQL",
+    version
 )]
 struct Args {
     /// Path to pgmoneta MCP configuration file
