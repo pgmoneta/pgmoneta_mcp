@@ -70,7 +70,7 @@ struct RequestHeader {
   - `Command::LIST_BACKUP` (2): List backups
   - See `src/constant.rs` for complete list
 
-- **client_version**: Version string (e.g., "0.2.0")
+- **client_version**: Version string (e.g., "0.2.1")
   - Defined in `constant::CLIENT_VERSION`
 
 - **output_format**: Response format
@@ -116,7 +116,7 @@ where
 {
   "Header": {
     "Command": 1,
-    "ClientVersion": "0.2.0",
+    "ClientVersion": "0.2.1",
     "Output": 1,
     "Timestamp": "20260304123045",
     "Compression": 2,
@@ -708,7 +708,7 @@ INFO Connected to server, username=admin
 DEBUG Sent request to server, request=PgmonetaRequest { 
     header: RequestHeader { 
         command: 1, 
-        client_version: "0.2.0", 
+        client_version: "0.2.1", 
         output_format: 1, 
         timestamp: "20260304123045", 
         compression: 0, 

@@ -42,7 +42,7 @@ doc/manual/en/??-*.md
 
 - [Pandoc](https://pandoc.org)
 - Eisvogel template available to [Pandoc](https://pandoc.org) (`--template eisvogel`)
-- A [LaTeX](https://www.tug.org/texlive/) engine supported by your Pandoc setup (for PDF output)
+- A Unicode-capable [LaTeX](https://www.tug.org/texlive/) engine supported by your Pandoc setup, such as `xelatex` or `lualatex` (for PDF output)
 
 ```sh
 dnf install pandoc texlive-scheme-basic \

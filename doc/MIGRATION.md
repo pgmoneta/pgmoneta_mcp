@@ -1,6 +1,6 @@
 # Migration
 
-## From 0.1.x to 0.2.0
+## From 0.1.x to 0.2.x
 
 ### Two-Step Vault Encryption
 

@@ -517,7 +517,7 @@ mod tests {
     fn test_request_header_serialization() {
         let header = RequestHeader {
             command: 1,
-            client_version: "0.2.0".to_string(),
+            client_version: "0.2.1".to_string(),
             output_format: Format::JSON,
             timestamp: "20260304123045".to_string(),
             compression: Compression::ZSTD,
@@ -529,7 +529,7 @@ mod tests {
             serde_json::from_str(&serialized).expect("Deserialization should succeed");
 
         assert_eq!(deserialized["Command"], 1);
-        assert_eq!(deserialized["ClientVersion"], "0.2.0");
+        assert_eq!(deserialized["ClientVersion"], "0.2.1");
         assert_eq!(deserialized["Output"], Format::JSON);
         assert_eq!(deserialized["Timestamp"], "20260304123045");
         assert_eq!(deserialized["Compression"], Compression::ZSTD);

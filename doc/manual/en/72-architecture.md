@@ -82,7 +82,7 @@ Each request includes a header specifying compression and encryption modes:
 {
   "Header": {
     "Command": 0,
-    "ClientVersion": "0.2.0",
+    "ClientVersion": "0.2.1",
     "Output": 0,
     "Timestamp": "20260315120000",
     "Compression": 2,

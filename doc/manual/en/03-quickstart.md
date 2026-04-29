@@ -5,7 +5,7 @@
 Make sure that [**pgmoneta_mcp**][pgmoneta_mcp] is installed and in your path by using `pgmoneta-mcp-server --help`. You should see
 
 ``` console
-pgmoneta-mcp-server 0.2.0
+pgmoneta-mcp-server 0.2.1
   MCP server for pgmoneta
 
 Usage:
@@ -123,7 +123,7 @@ The server can be stopped by pressing Ctrl-C (`^C`) in the console where you sta
 You can see the commands it supports by using `pgmoneta-mcp-admin --help` which will give:
 
 ``` console
-pgmoneta-mcp-admin 0.2.0
+pgmoneta-mcp-admin 0.2.1
   Administration utility for pgmoneta_mcp
 
 Usage:

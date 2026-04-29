@@ -1541,9 +1541,9 @@ mod tests {
 
     #[test]
     fn test_startup_banner_contains_only_title() {
-        let banner = startup_banner("0.2.0");
+        let banner = startup_banner("0.2.1");
 
-        assert!(banner.contains("pgmoneta MCP client 0.2.0"));
+        assert!(banner.contains("pgmoneta MCP client 0.2.1"));
         assert!(!banner.contains("Server:"));
         assert!(!banner.contains("Username:"));
         assert!(!banner.contains("Help:"));
