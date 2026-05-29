@@ -198,7 +198,48 @@ let request = ListBackupsRequest {
 }
 ```
 
-**Core Methods**
+## WAL information
+
+`walinfo` is a local WAL inspection operation; unlike the management commands, it does not use `forward_request`. `PgmonetaClient::request_walinfo` invokes `pgmoneta-walinfo` for `<base_dir>/<server>/wal`.
+
+#### WalInfoRequest
+
+```rust
+pub struct WalInfoRequest {
+    pub username: String,
+    pub server: String,
+    pub mode: Option<String>,
+    pub time: Option<String>,
+    pub window_minutes: Option<u32>,
+}
+```
+
+`username` must be a configured pgmoneta admin and `server` identifies the configured pgmoneta server. `mode` is `user` by default and returns a readable transaction timeline; `developer` returns JSON. `time` optionally filters by time of day, and `window_minutes` includes records within that many minutes on either side (default `5`).
+
+`time` accepts `4:02pm`, `4pm`, `16:02`, `13:24:57`, and `4:02:30pm`. When a transaction has a timestamp in the selected window, the response includes all records with that transaction ID.
+
+**Developer-mode response**
+
+```json
+{
+  "Outcome": { "Status": true, "Command": "walinfo" },
+  "Response": { "WAL": [] }
+}
+```
+
+**Usage**
+
+```rust
+let response = PgmonetaClient::request_walinfo(
+    "admin",
+    "primary",
+    Some("developer".to_string()),
+    Some("16:02".to_string()),
+    Some(10),
+).await?;
+```
+
+### Core Methods
 
 **build_request_header**
 

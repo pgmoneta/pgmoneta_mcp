@@ -21,5 +21,5 @@ Start in this order:
 3. [Configuration](04-configuration.md)
 4. [Client](50-client.md)
 5. [Inspector](51-inspector.md)
-6. Tool chapters ([10-backup](10-backup.md) through [35-clear](35-clear.md))
+6. Tool chapters ([10-backup](10-backup.md) through [36-walinfo](36-walinfo.md))
 

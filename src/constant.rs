@@ -94,6 +94,8 @@ impl Command {
     pub const CONF_SET: u32 = 23;
     /// Command to switch server online/offline mode.
     pub const MODE: u32 = 24;
+    /// Command to retrieve WAL information.
+    pub const WALINFO: u32 = 25;
 
     /// Translates a numeric management command code into its string representation.
     ///
@@ -128,6 +130,7 @@ impl Command {
             Self::CONF_GET => Ok("conf get"),
             Self::CONF_SET => Ok("conf set"),
             Self::MODE => Ok("mode"),
+            Self::WALINFO => Ok("walinfo"),
             default => Err(anyhow!("Unrecognized command enum: {default}")),
         }
     }

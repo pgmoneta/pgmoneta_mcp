@@ -30,6 +30,7 @@ mod retention;
 mod shutdown;
 mod status;
 mod verify;
+mod walinfo;
 
 use super::compression::CompressionUtil;
 use super::configuration::{CONFIG, Configuration};
@@ -457,6 +458,7 @@ mod tests {
                 pgmoneta: PgmonetaConfiguration {
                     host: "127.0.0.1".to_string(),
                     port: 5001,
+                    base_dir: "/tmp/pgmoneta".to_string(),
                     metrics: 5002,
                     compression: "zstd".to_string(),
                     encryption: "aes_256_gcm".to_string(),

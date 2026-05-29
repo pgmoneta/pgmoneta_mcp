@@ -60,6 +60,7 @@ log_rotation_age = 0
 [pgmoneta]
 host = localhost
 port = 5000
+base_dir = /var/lib/pgmoneta
 metrics = 5001
 
 [llm]
@@ -115,10 +116,15 @@ server.
 | :------- | :------ | :--- | :------- | :---------- |
 | `host` | - | String | Yes | The address of the pgmoneta instance |
 | `port` | - | Int | Yes | The port of the pgmoneta instance |
+| `base_dir` | - | String | Yes | pgmoneta's data directory. `walinfo` reads WAL files from `<base_dir>/<server>/wal`. |
 | `metrics` | `5001` | Int | No | The port of the pgmoneta Prometheus metrics endpoint |
 
 The management `port` must match pgmoneta's `management` setting. The `metrics`
 port is separate and should match pgmoneta's Prometheus metrics endpoint.
+
+Set `base_dir` to the same data directory configured in pgmoneta. The
+`walinfo` tool requires the corresponding `<base_dir>/<server>/wal` directory
+to exist.
 
 ## Section: `[llm]`
 

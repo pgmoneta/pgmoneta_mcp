@@ -32,6 +32,7 @@ readonly MANAGEMENT_PORT=5002
 readonly PGMONETA_PORT_ONE=5001
 readonly PGMONETA_PORT_TWO=9100
 readonly POSTGRESQL_PORT=5432
+readonly POSTGRESQL_READY_FILE="/tmp/pgmoneta-postgresql-ready"
 readonly COMPRESS_FIXTURE_FILE="/tmp/pgmoneta-mcp-compress-fixture.txt"
 readonly DECOMPRESS_FIXTURE_SOURCE="/tmp/pgmoneta-mcp-decompress-fixture.txt"
 readonly DECOMPRESS_FIXTURE_ARCHIVE="/tmp/pgmoneta-mcp-decompress-fixture.txt.zstd"
@@ -268,6 +269,7 @@ ci_check_postgres_running() {
 
 ci_run_postgresql() {
     echo "Starting PostgreSQL for CI tests..."
+    rm -f "$POSTGRESQL_READY_FILE"
     chmod a+x "$POSTGRESQL_RUN_FILE"
     "$POSTGRESQL_RUN_FILE" &
     POSTGRES_PID=$!
@@ -278,9 +280,10 @@ ci_wait_for_postgresql() {
     local max_wait=30
     local count=0
 
-    until nc -z localhost $POSTGRESQL_PORT; do
+    until [[ -f "$POSTGRESQL_READY_FILE" ]] \
+        && /usr/pgsql-18/bin/pg_isready -q -h localhost -p "$POSTGRESQL_PORT"; do
         if [ "$count" -ge "$max_wait" ]; then
-            echo "PostgreSQL did not become ready within ${max_wait}s"
+            echo "PostgreSQL did not complete setup and become ready within ${max_wait}s"
             exit 1
         fi
 
@@ -570,6 +573,7 @@ ci_shutdown() {
     [ -n "${POSTGRES_PID:-}" ] && kill -KILL "$POSTGRES_PID" >/dev/null 2>&1 || true
     [ -n "${PGMONETA_PID:-}" ] && wait "$PGMONETA_PID" 2>/dev/null || true
     [ -n "${POSTGRES_PID:-}" ] && wait "$POSTGRES_PID" 2>/dev/null || true
+    rm -f "$POSTGRESQL_READY_FILE"
 }
 
 ## ================================

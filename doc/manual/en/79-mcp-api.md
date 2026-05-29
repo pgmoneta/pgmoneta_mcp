@@ -605,6 +605,33 @@ Numeric enum values are translated to descriptive strings:
 - `2` → `"Allocation error"`
 - And many more (see `constant.rs` for full list)
 
+**walinfo**
+
+**Description**: Inspects PostgreSQL Write-Ahead Log (WAL) activity stored by pgmoneta.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `server` (string, required): Server name as configured in pgmoneta
+- `mode` (string, optional): `user` for a transaction timeline (default), or `developer` for raw JSON
+- `time` (string, optional): Time of day to filter around, for example `4:02pm` or `16:02`
+- `window_minutes` (integer, optional): Minutes on either side of `time`; defaults to `5`
+
+`walinfo` reads `<base_dir>/<server>/wal`, so `[pgmoneta].base_dir` must match the pgmoneta data directory.
+
+**Example**:
+```json
+{
+  "tool": "walinfo",
+  "arguments": {
+    "username": "admin",
+    "server": "primary",
+    "mode": "developer",
+    "time": "16:02",
+    "window_minutes": 10
+  }
+}
+```
+
 **Error Handling**
 
 The MCP server uses the `McpError` type from rmcp for standardized error responses:

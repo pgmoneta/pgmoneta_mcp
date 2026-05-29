@@ -1490,7 +1490,14 @@ fn execute_tool_command(
         ClientMode::User => sanitize_user_arguments(&tool.input_schema, args),
         ClientMode::Developer => args,
     };
-    let args = apply_tool_defaults(&tool.input_schema, args, defaults);
+    let mut args = apply_tool_defaults(&tool.input_schema, args, defaults);
+    if name == "walinfo" && !args.contains_key("mode") {
+        let walinfo_mode = match mode {
+            ClientMode::User => "user",
+            ClientMode::Developer => "developer",
+        };
+        args.insert("mode".to_string(), Value::String(walinfo_mode.to_string()));
+    }
     if mode == ClientMode::User {
         let missing = missing_required_arguments(&tool.input_schema, &args);
         if !missing.is_empty() {

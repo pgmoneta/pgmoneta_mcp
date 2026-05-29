@@ -68,6 +68,7 @@ pub fn init_config() {
             pgmoneta: PgmonetaConfiguration {
                 host: "127.0.0.1".to_string(),
                 port: 5002,
+                base_dir: "/tmp/pgmoneta".to_string(),
                 metrics: 5001,
                 compression,
                 encryption,
