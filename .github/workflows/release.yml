@@ -1,0 +1,194 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+# Serialize runs for the same tag so a re-push or re-run never races another run
+# on the shared GitHub release (which previously caused "release not found").
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Idempotent: don't fail a re-run if the release already exists.
+          if ! gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --verify-tag
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            archive: tar.gz
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            use_cross: true
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+            archive: tar.gz
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            use_cross: true
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --locked
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          BIN_DIR=target/${{ matrix.target }}/release
+          ARCHIVE=pgmoneta-mcp-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          tar -czf "$ARCHIVE" -C "$BIN_DIR" \
+            pgmoneta-mcp-server \
+            pgmoneta-mcp-admin \
+            pgmoneta-mcp-client \
+            pgmoneta-mcp-inspector
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $binaries = @(
+            "target\${{ matrix.target }}\release\pgmoneta-mcp-server.exe",
+            "target\${{ matrix.target }}\release\pgmoneta-mcp-admin.exe",
+            "target\${{ matrix.target }}\release\pgmoneta-mcp-client.exe",
+            "target\${{ matrix.target }}\release\pgmoneta-mcp-inspector.exe"
+          )
+          $archive = "pgmoneta-mcp-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          Compress-Archive -Path $binaries -DestinationPath $archive
+          "ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "$ARCHIVE" --clobber
+
+  manual:
+    name: Build manual
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pandoc and TeX Live
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pandoc \
+            texlive-xetex \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            texlive-plain-generic \
+            texlive-latex-extra \
+            lmodern
+
+      - name: Install eisvogel template
+        run: |
+          # The release tarball nests everything under Eisvogel-<version>/, so
+          # strip that component to place eisvogel.latex directly where pandoc's
+          # --template eisvogel looks (the templates data directory).
+          EISVOGEL_VERSION=3.5.0
+          mkdir -p ~/.local/share/pandoc/templates
+          curl -fsSLo /tmp/eisvogel.tar.gz \
+            "https://github.com/Wandmalfarbe/pandoc-latex-template/releases/download/v${EISVOGEL_VERSION}/Eisvogel.tar.gz"
+          tar -xzf /tmp/eisvogel.tar.gz -C ~/.local/share/pandoc/templates --strip-components=1
+
+      - name: Patch eisvogel for TeX Live packages
+        run: |
+          TEMPLATE=~/.local/share/pandoc/templates/eisvogel.latex
+          # Ubuntu runners provide sourcesanspro.sty; older template variants may
+          # still reference sourcesans.sty and fail with "File `sourcesans.sty' not found".
+          sed -i -E 's/\\usepackage(\[[^]]*\])?\{sourcesans\}/\\usepackage\1{sourcesanspro}/g' "$TEMPLATE"
+          if grep -q '{sourcesans}' "$TEMPLATE"; then
+            echo "Eisvogel template still references sourcesans after patching." >&2
+            exit 1
+          fi
+
+      - name: Build manual
+        run: bash doc/build_manual.sh
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            target/doc/pgmoneta-mcp-en.pdf \
+            target/doc/pgmoneta-mcp-en.html \
+            --clobber
+
+  source:
+    name: Source bundle
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create source bundle
+        run: |
+          BUNDLE=pgmoneta-mcp-${{ github.ref_name }}-source.tar.gz
+          git archive --format=tar.gz --prefix=pgmoneta-mcp-${{ github.ref_name }}/ HEAD -o "$BUNDLE"
+          sha256sum "$BUNDLE" > "${BUNDLE}.sha256"
+          echo "BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "$BUNDLE" "${BUNDLE}.sha256" --clobber
