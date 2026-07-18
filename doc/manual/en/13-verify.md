@@ -12,6 +12,40 @@ Verify the integrity of a backup.
 Verify the latest backup for the primary server
 ```
 
+Example Output:
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "verify",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718175831
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:4.7336"
+    },
+    "Request": {
+        "Backup": "latest",
+        "Directory": "/tmp",
+        "Server": "primary"
+    },
+    "Response": {
+        "Backup": 20260718173645,
+        "Files": {
+            "All": {},
+            "Failed": {}
+        },
+        "MajorVersion": 18,
+        "MinorVersion": 1,
+        "Server": "primary",
+        "ServerVersion": "0.22.0"
+    }
+}
+```
+
 ## Tool: /verify
 
 **Tool description**

@@ -196,13 +196,7 @@ In `pgmoneta-mcp-client`, ask:
 Take a backup for server primary
 ```
 
-Or, in developer mode:
-
-``` text
-backup {"server":"primary"}
-```
-
-Expected result:
+Example Output:
 
 ``` text
 primary (pgmoneta 0.22.0 w/ PostgreSQL 18.1)
@@ -220,13 +214,7 @@ Ask:
 List backups for server primary in descending order
 ```
 
-Or, in developer mode:
-
-``` text
-list_backups {"server":"primary","sort":"desc"}
-```
-
-Expected result:
+Example Output:
 
 ``` text
 {
@@ -284,13 +272,7 @@ Ask:
 Restore the latest backup for server primary to /tmp/pgmoneta-restore
 ```
 
-Or, in developer mode:
-
-``` text
-restore {"server":"primary","backup_id":"latest","directory":"/tmp/pgmoneta-restore"}
-```
-
-Expected result:
+Example Output:
 
 - The command returns success `true` in `Outcome.Status`
 - The restore target directory contains restored database files
@@ -473,7 +455,7 @@ Hello from pgmoneta MCP server!
 Get information about the latest backup for server primary
 ```
 
-Expected result: detailed backup information in JSON format.
+Example Output: detailed backup information in JSON format.
 
 ## Troubleshooting
 

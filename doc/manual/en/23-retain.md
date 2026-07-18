@@ -11,6 +11,41 @@ Protect a backup from retention cleanup.
 ```text
 Retain the latest backup for the primary server and include dependent backups
 ```
+Example Output:
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "retain",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718184231
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0116"
+    },
+    "Request": {
+        "Backup": "latest",
+        "Cascade": true,
+        "Server": "primary"
+    },
+    "Response": {
+        "Backups": [
+            20260718183113
+        ],
+        "Cascade": true,
+        "Comments": "ticket|before release",
+        "Keep": true,
+        "MajorVersion": 18,
+        "MinorVersion": 1,
+        "Server": "primary",
+        "ServerVersion": "0.22.0",
+        "Valid": 1
+    }
+}
+```
 
 ## Tool: /retain
 

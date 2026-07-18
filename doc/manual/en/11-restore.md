@@ -11,6 +11,46 @@ Restore a backup into a target directory.
 ```text
 Restore the latest backup for the primary server into /tmp/restore
 ```
+Example Output:
+
+```
+
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "restore",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718173829
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:5.7377"
+    },
+    "Request": {
+        "Backup": "latest",
+        "Directory": "/tmp/restore",
+        "Position": "primary",
+        "Server": "primary"
+    },
+    "Response": {
+        "Backup": 20260718173645,
+        "BackupSize": "12.44 MB",
+        "BiggestFileSize": "5.68 MB",
+        "Comments": "",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Incremental": false,
+        "IncrementalParent": "",
+        "MajorVersion": 18,
+        "MinorVersion": 1,
+        "RestoreSize": "12.43 MB",
+        "Server": "primary",
+        "ServerVersion": "0.22.0"
+    }
+}
+```
 
 ## Tool: /restore
 

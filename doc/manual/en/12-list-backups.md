@@ -12,6 +12,15 @@ Show the backups available for a server.
 List the backups for the primary server in descending order
 ```
 
+Example Output:
+
+```
+primary (pgmoneta 0.22.0 w/ PostgreSQL 18.1)
+• 20260718173645 | Full, Backup: 12.44 MB, Restore: 12.43 MB, Valid
+• 20260718173502 | Full, Backup: 0 B, Restore: 12.43 MB, Valid
+• 20260718173237 | Full, Backup: 12.44 MB, Restore: 12.43 MB, Valid
+```
+
 ## Tool: /list_backups
 
 **Tool description**

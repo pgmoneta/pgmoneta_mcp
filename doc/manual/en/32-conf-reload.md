@@ -1,6 +1,4 @@
-\newpage
-
-# Conf Reload
+## Reload
 
 **Natural language description**
 
@@ -10,6 +8,29 @@ Reload configuration from server files.
 
 ```text
 Reload pgmoneta configuration files now
+```
+Example Output:
+```
+
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "conf reload",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718190236
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0521"
+    },
+    "Request": {},
+    "Response": {
+        "Restart": false,
+        "ServerVersion": "0.22.0"
+    }
+}
 ```
 
 ## Tool: /conf_reload

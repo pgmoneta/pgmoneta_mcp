@@ -9,7 +9,33 @@ Decompress a file on the pgmoneta host.
 **Example**
 
 ```text
-Decompress /tmp/base.tar.zst on the server
+Decompress /tmp/base.tar.zstd on the server
+```
+
+Example Output:
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "decompress",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718182652
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0005"
+    },
+    "Request": {
+        "SourceFile": "/tmp/base.tar.zstd"
+    },
+    "Response": {
+        "DestinationFile": "/tmp/base.tar",
+        "ServerVersion": "0.22.0"
+    }
+}
+
 ```
 
 ## Tool: /decompress
@@ -30,6 +56,6 @@ Decompress a file.
 **Examples**
 
 ```text
-decompress {"file_path":"/tmp/base.tar.zst"}
+decompress {"file_path":"/tmp/base.tar.zstd"}
 ```
 

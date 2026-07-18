@@ -4,12 +4,48 @@
 
 **Natural language description**
 
-Remove retention protection from a backup.
+Expunge a backup.
 
 **Example**
 
 ```text
-Remove retention protection from the latest backup on primary
+Expunge the latest backup on the primary server
+```
+
+Example Output:
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "expunge",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718184752
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0119"
+    },
+    "Request": {
+        "Backup": "latest",
+        "Cascade": false,
+        "Server": "primary"
+    },
+    "Response": {
+        "Backups": [
+            20260718183113
+        ],
+        "Cascade": false,
+        "Comments": "ticket|before release",
+        "Keep": false,
+        "MajorVersion": 18,
+        "MinorVersion": 1,
+        "Server": "primary",
+        "ServerVersion": "0.22.0",
+        "Valid": 1
+    }
+}
 ```
 
 ## Tool: /expunge

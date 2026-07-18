@@ -11,6 +11,30 @@ Encrypt a file on the pgmoneta host.
 ```text
 Encrypt /tmp/base.tar on the server
 ```
+Example Output:
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "encrypt",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718182743
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0021"
+    },
+    "Request": {
+        "SourceFile": "/tmp/base.tar"
+    },
+    "Response": {
+        "DestinationFile": "/tmp/base.tar.aes",
+        "ServerVersion": "0.22.0"
+    }
+}
+```
 
 ## Tool: /encrypt
 

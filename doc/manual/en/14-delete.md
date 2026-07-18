@@ -12,6 +12,37 @@ Delete a backup from pgmoneta.
 Delete the oldest backup for the primary server
 ```
 
+Example Output: 
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "delete",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718181152
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0225"
+    },
+    "Request": {
+        "Backup": "oldest",
+        "Force": false,
+        "Server": "primary"
+    },
+    "Response": {
+        "Backup": 20260718181132,
+        "MajorVersion": 18,
+        "MinorVersion": 1,
+        "Server": "primary",
+        "ServerVersion": "0.22.0"
+    }
+}
+
+```
+
 ## Tool: /delete
 
 **Tool description**

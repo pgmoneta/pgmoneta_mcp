@@ -11,6 +11,31 @@ Compress a file using the configured pgmoneta algorithm.
 ```text
 Compress /tmp/base.tar on the server
 ```
+Example Output:
+
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "compress",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718182311
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0005"
+    },
+    "Request": {
+        "SourceFile": "/tmp/base.tar"
+    },
+    "Response": {
+        "DestinationFile": "/tmp/base.tar.zstd",
+        "ServerVersion": "0.22.0"
+    }
+}
+```
 
 ## Tool: /compress
 

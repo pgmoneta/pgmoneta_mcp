@@ -12,6 +12,29 @@ Check pgmoneta server reachability.
 Check whether pgmoneta is reachable
 ```
 
+Example Output:
+
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "ping",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718185013
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0000"
+    },
+    "Request": "",
+    "Response": {
+        "ServerVersion": "0.22.0"
+    }
+}
+```
+
 ## Tool: /ping
 
 **Tool description**

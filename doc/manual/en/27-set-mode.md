@@ -12,6 +12,35 @@ Switch a pgmoneta server between online and offline mode.
 Set server primary to offline mode
 ```
 
+Example Output:
+```
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "mode",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718185343
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:0.0000"
+    },
+    "Request": {
+        "Action": "offline",
+        "Server": "primary"
+    },
+    "Response": {
+        "MajorVersion": 18,
+        "MinorVersion": 1,
+        "Online": false,
+        "Server": "primary",
+        "ServerVersion": "0.22.0"
+    }
+}
+```
+
 ## Tool: /set_mode
 
 **Tool description**

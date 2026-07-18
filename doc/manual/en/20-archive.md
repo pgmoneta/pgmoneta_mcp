@@ -11,6 +11,37 @@ Archive a backup to a directory.
 ```text
 Archive the latest backup for the primary server into /tmp/archive
 ```
+Example Output:
+```         
+{
+    "Header": {
+        "ClientVersion": "0.21.0",
+        "Command": "archive",
+        "Compression": "zstd",
+        "Encryption": "aes_256_gcm",
+        "Output": 1,
+        "Timestamp": 20260718183231
+    },
+    "Outcome": {
+        "Status": true,
+        "Time": "00:00:5.1568"
+    },
+    "Request": {
+        "Backup": "latest",
+        "Directory": "/tmp/archive",
+        "Position": "current",
+        "Server": "primary"
+    },
+    "Response": {
+        "Backup": "",
+        "FileName": "/tmp/archive/archive-primary-20260718183113.tar.zstd.aes",
+        "MajorVersion": 18,
+        "MinorVersion": 1,
+        "Server": "primary",
+        "ServerVersion": "0.22.0"
+    }
+}
+```
 
 ## Tool: /archive
 

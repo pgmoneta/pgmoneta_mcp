@@ -12,6 +12,13 @@ Take a backup of a pgmoneta server.
 Take a full backup of the primary server
 ```
 
+Example Output:
+
+```
+primary (pgmoneta 0.22.0 w/ PostgreSQL 18.1)
+• 20260718173237 | Full, Backup: 12.44 MB, Restore: 12.43 MB, Valid
+```
+
 ## Tool: /backup
 
 **Tool description**
