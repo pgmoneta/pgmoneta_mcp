@@ -228,4 +228,4 @@ Add the following to your Claude Desktop configuration file:
 
 Restart Claude Desktop and the pgmoneta tools will be available.
 
-For implementation details, see [Client internals](73-mcp-client.md).
+For implementation details, see [Client internals](74-mcp-client.md).

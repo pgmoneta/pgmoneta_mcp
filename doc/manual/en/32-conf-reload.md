@@ -9,48 +9,15 @@ Reload configuration from server files.
 ```text
 Reload pgmoneta configuration files now
 ```
+
 Example Output:
+
 ```
+Reloaded the pgmoneta configuration files.
 
-{
-    "Header": {
-        "ClientVersion": "0.21.0",
-        "Command": "conf reload",
-        "Compression": "zstd",
-        "Encryption": "aes_256_gcm",
-        "Output": 1,
-        "Timestamp": 20260718190236
-    },
-    "Outcome": {
-        "Status": true,
-        "Time": "00:00:0.0521"
-    },
-    "Request": {},
-    "Response": {
-        "Restart": false,
-        "ServerVersion": "0.22.0"
-    }
-}
+* **Outcome:** Successful
+* **Time taken:** Completed in about 0 seconds
+* **Details:**
+    * **Restart Required:** No
+    * **Server Version:** 0.22.0
 ```
-
-## Tool: /conf_reload
-
-**Tool description**
-
-Reload configuration from server files.
-
-**Arguments**
-
-- No tool-specific arguments beyond `username`.
-
-**Behavior**
-
-- Reloads the active pgmoneta configuration without changing tool input.
-- `username` is required by the MCP API and is typically injected by `pgmoneta-mcp-client`.
-
-**Examples**
-
-```text
-conf_reload {}
-```
-

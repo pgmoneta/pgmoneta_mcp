@@ -12,59 +12,24 @@ Delete a backup from pgmoneta.
 Delete the oldest backup for the primary server
 ```
 
-Example Output: 
-```
-{
-    "Header": {
-        "ClientVersion": "0.21.0",
-        "Command": "delete",
-        "Compression": "zstd",
-        "Encryption": "aes_256_gcm",
-        "Output": 1,
-        "Timestamp": 20260718181152
-    },
-    "Outcome": {
-        "Status": true,
-        "Time": "00:00:0.0225"
-    },
-    "Request": {
-        "Backup": "oldest",
-        "Force": false,
-        "Server": "primary"
-    },
-    "Response": {
-        "Backup": 20260718181132,
-        "MajorVersion": 18,
-        "MinorVersion": 1,
-        "Server": "primary",
-        "ServerVersion": "0.22.0"
-    }
-}
+Example Output:
 
 ```
 
-## Tool: /delete
+Deleted the oldest backup for the primary server.
 
-**Tool description**
+The deletion was **successful**.
 
-Delete a backup. `force` defaults to `false`.
+### Deletion Details
+*   **Status**: Success
+*   **Operation Time**: Completed in about 3.65 seconds
+*   **Backup Identifier Deleted**: **20260726003033**
 
-**Arguments**
+### Server Information
+*   **Server Name**: primary
+*   **Server Version**: 0.22.0
+*   **Database Details**:
+    *   Major Version: 18
+    *   Minor Version: 1
 
-- `server`: The pgmoneta server name.
-- `backup_id`: Backup label or one of `newest`, `latest`, `oldest`.
-- Optional `force`: Force deletion, default `false`.
-
-**Behavior**
-
-- If `force` is omitted, pgmoneta_mcp sends `false`.
-- Use `force` only when you want to override normal deletion safeguards.
-- `username` is required by the MCP API and is typically injected by `pgmoneta-mcp-client`.
-
-**Examples**
-
-```text
-delete {"server":"primary","backup_id":"oldest"}
-delete {"server":"primary","backup_id":"oldest","force":true}
 ```
-

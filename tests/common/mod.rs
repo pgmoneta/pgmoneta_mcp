@@ -287,7 +287,7 @@ async fn read_response<R>(stream: &mut R) -> anyhow::Result<String>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
-    let compression = timeout(Duration::from_secs(10), stream.read_u8()).await??;
+    let compression = timeout(Duration::from_secs(100), stream.read_u8()).await??;
     let encryption = timeout(Duration::from_secs(2), stream.read_u8()).await??;
     let len = timeout(Duration::from_secs(2), stream.read_u32()).await?? as usize;
 

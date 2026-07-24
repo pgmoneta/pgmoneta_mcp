@@ -198,12 +198,37 @@ Take a backup for server primary
 
 Example Output:
 
-``` text
-primary (pgmoneta 0.22.0 w/ PostgreSQL 18.1)
-* 20260706113507 | Full, Backup: 6.03 MB, Restore: 6.02 MB, Valid
+```
+Successfully created a full backup on **primary**.
+
+### Backup Summary
+
+*   **Server:** primary
+*   **Server Version:** 0.22.0
+*   **Backup ID:** 20260726043310
+*   **Backup Type:** Full (Incremental: No)
+*   **Status:** Success
+
+### Operation Details
+
+*   **Operation Status:** True
+*   **Overall Success:** True
+*   **Time Taken:** Completed in about 2 seconds
+*   **Compression:** zstd
+*   **Encryption:** aes_256_gcm
+*   **Major Version:** 18
+*   **Minor Version:** 1
+*   **Valid:** 1
+
+### File Information
+
+*   **Backup Size:** 3.77 MB
+*   **Restore Size:** 6.20 MB
+*   **Biggest File Size:** 232.00 KB
+*   **Incremental Parent:** (None)
 ```
 
-A new backup label `20260706113507` is created. You can use this label in the
+A new backup is created. You can use this label in the
 next step, or simply use `latest` to refer to the newest backup.
 
 ## List backups
@@ -216,49 +241,40 @@ List backups for server primary in descending order
 
 Example Output:
 
-``` text
-{
-    "Header": {
-        "ClientVersion": "0.21.0",
-        "Command": "list-backup",
-        "Compression": "zstd",
-        "Encryption": "aes_256_gcm",
-        "Output": 1,
-        "Timestamp": 20260714124309
-    },
-    "Outcome": {
-        "Status": true,
-        "Time": "00:00:0.0023"
-    },
-    "Request": {
-        "Server": "primary",
-        "Sort": "desc"
-    },
-    "Response": {
-        "Backups": [
-            {
-                "Backup": 20260712211454,
-                "BackupSize": "6.11 MB",
-                "BiggestFileSize": "232.00 KB",
-                "Comments": "",
-                "Compression": "zstd",
-                "Encryption": "aes_256_gcm",
-                "Incremental": false,
-                "IncrementalParent": "",
-                "Keep": false,
-                "RestoreSize": "6.10 MB",
-                "Server": "primary",
-                "Valid": 1,
-                "WAL": 0
-            }
-        ],
-        "MajorVersion": 0,
-        "MinorVersion": 0,
-        "NumberOfBackups": 1,
-        "Server": "primary",
-        "ServerVersion": "0.22.0"
-    }
-}
+```
+Listed the backups for the primary server in descending order, which was completed in about 0 seconds.
+
+### Server Backup Details
+*   **Server Name:** primary
+*   **Server Version:** 0.22.0
+*   **Total Number of Backups:** 10
+*   **Major Version:** 18
+*   **Minor Version:** 1
+
+### Backup History (Descending Order)
+
+Here is the detailed list of the 10 backups found on the primary server.
+
+| Backup ID | Backup Size | Biggest File Size | Incremental | Parent ID | Keep | Restore Size |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **20260726043310** | 6.20 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726012918 | 3.78 MB | 3.35 MB | Yes | 20260726011802 | No | 25.37 MB |
+| 20260726011802 | 3.77 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726011743 | 3.77 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726011419 | 3.77 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726010308 | 3.77 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726005422 | 3.77 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726004442 | 3.77 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726004007 | 3.77 MB | 232.00 KB | No | - | No | 6.20 MB |
+| 20260726003033 | 6.20 MB | 232.00 KB | No | - | No | 6.20 MB |
+
+***
+
+**Common Backup Details:**
+*   **Compression:** zstd
+*   **Encryption:** aes\_256\_gcm
+*   **Valid:** All backups are valid (1).
+*   **WAL (Write Ahead Log):** 0 (All backups).
 ```
 
 ## Restore a backup
@@ -269,53 +285,36 @@ target directory on the pgmoneta host.
 Ask:
 
 ``` text
-Restore the latest backup for server primary to /tmp/pgmoneta-restore
+Restore the latest backup for server primary to /tmp/restore
 ```
 
 Example Output:
 
-- The command returns success `true` in `Outcome.Status`
-- The restore target directory contains restored database files
-
-Example:
-
-``` text
-{
-    "Header": {
-        "ClientVersion": "0.21.0",
-        "Command": "restore",
-        "Compression": "zstd",
-        "Encryption": "aes_256_gcm",
-        "Output": 1,
-        "Timestamp": 20260714124440
-    },
-    "Outcome": {
-        "Status": true,
-        "Time": "00:00:4.3680"
-    },
-    "Request": {
-        "Backup": "latest",
-        "Directory": "/tmp/pgmoneta-restore",
-        "Position": "current",
-        "Server": "primary"
-    },
-    "Response": {
-        "Backup": 20260712211454,
-        "BackupSize": "6.11 MB",
-        "BiggestFileSize": "232.00 KB",
-        "Comments": "",
-        "Compression": "zstd",
-        "Encryption": "aes_256_gcm",
-        "Incremental": false,
-        "IncrementalParent": "",
-        "MajorVersion": 0,
-        "MinorVersion": 0,
-        "RestoreSize": "6.10 MB",
-        "Server": "primary",
-        "ServerVersion": "0.22.0"
-    }
-}
 ```
+Restored the latest backup for the primary server into /tmp/restore.
+
+**Restore Summary:**
+
+*   **Success:** True
+*   **Time Taken:** Completed in about 14 seconds
+*   **Server:** primary
+*   **Server Version:** 0.22.0
+*   **Backup ID:** **20260726043310**
+*   **Backup Size:** 6.20 MB
+*   **Restore Size:** 6.20 MB
+*   **Biggest File Size:** 232.00 KB
+*   **Incremental:** No
+*   **Compression:** zstd
+*   **Encryption:** aes_256_gcm
+*   **Major Version:** 18
+*   **Minor Version:** 1
+*   **Comments:**
+```
+
+The restore should complete successfully:
+
+- The command reports success
+- The restore target directory contains restored database files
 
 If something fails, check the **Troubleshooting** section below and inspect MCP
 server logs.
@@ -455,7 +454,52 @@ Hello from pgmoneta MCP server!
 Get information about the latest backup for server primary
 ```
 
-Example Output: detailed backup information in JSON format.
+Example Output:
+
+```
+Retrieved detailed information for the latest backup on the primary server.
+
+### **Backup Summary**
+
+*   **Backup ID:** 20260726023426
+*   **Server Name:** primary
+*   **Server Version:** 0.22.0
+*   **Comments:** ticket|before release
+*   **Backup Status:** **Valid**
+*   **Compression:** zstd
+*   **Encryption:** aes\_256\_gcm
+*   **Keep:** No
+
+### **Size and Storage Details**
+
+*   **Backup Size:** 3.78 MB
+*   **Restore Size:** 25.37 MB
+*   **Biggest File Size:** 3.35 MB
+*   **WAL File:** 000000010000000300000082
+
+### **Time and Versioning**
+
+*   **Elapsed Time:** Completed in less than 1 second (0.0 seconds)
+*   **Major Version:** 18
+*   **Minor Version:** 1
+*   **Tablespaces:** 0
+
+### **LSN and Timeline Details**
+
+**Start Details:**
+*   **Start LSN:** 0x82000028
+*   **Start HiLSN:** 0x3
+*   **Start Timeline:** 1
+
+**End Details:**
+*   **End LSN:** 0x82000120
+*   **End HiLSN:** 0x3
+*   **End Timeline:** 1
+
+**Checkpoint Details:**
+*   **Checkpoint LoLSN:** 0x82000080
+*   **Checkpoint HiLSN:** 0x3
+```
 
 ## Troubleshooting
 

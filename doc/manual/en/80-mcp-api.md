@@ -637,7 +637,7 @@ The MCP server uses SCRAM-SHA-256 for authentication with the pgmoneta server:
 3. **Master key**: Stored in `~/.pgmoneta-mcp/master.key` with 0600 permissions
 4. **SCRAM handshake**: Performed during TCP connection establishment
 
-See [Security API documentation](80-security-api.md) for detailed information.
+See [Security API documentation](81-security-api.md) for detailed information.
 
 **Configuration**
 

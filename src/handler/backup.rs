@@ -64,20 +64,16 @@ impl AsyncTool<PgmonetaHandler> for BackupServerTool {
         request: BackupRequest,
     ) -> Result<String, McpError> {
         let result = if let Some(backup_id) = &request.backup_id {
-            PgmonetaClient::request_incremental_backup(
-                &request.username,
-                &request.server,
-                backup_id,
-            )
-            .await
-            .map_err(|e| {
-                McpError::internal_error(
-                    format!("Failed to create incremental backup: {:?}", e),
-                    None,
-                )
-            })?
+            PgmonetaClient::request_backup(&request.username, &request.server, Some(backup_id))
+                .await
+                .map_err(|e| {
+                    McpError::internal_error(
+                        format!("Failed to create incremental backup: {:?}", e),
+                        None,
+                    )
+                })?
         } else {
-            PgmonetaClient::request_full_backup(&request.username, &request.server)
+            PgmonetaClient::request_backup(&request.username, &request.server, None)
                 .await
                 .map_err(|e| {
                     McpError::internal_error(format!("Failed to create full backup: {:?}", e), None)

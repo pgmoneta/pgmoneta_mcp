@@ -15,32 +15,59 @@ Take a full backup of the primary server
 Example Output:
 
 ```
-primary (pgmoneta 0.22.0 w/ PostgreSQL 18.1)
-• 20260718173237 | Full, Backup: 12.44 MB, Restore: 12.43 MB, Valid
+Successfully created a full backup on **primary**.
+
+### Backup Summary
+
+*   **Server:** primary
+*   **Server Version:** 0.22.0
+*   **Backup ID:** 20260726043310
+*   **Backup Type:** Full (Incremental: No)
+*   **Status:** Success
+
+### Operation Details
+
+*   **Operation Status:** True
+*   **Overall Success:** True
+*   **Time Taken:** Completed in about 2 seconds
+*   **Compression:** zstd
+*   **Encryption:** aes_256_gcm
+*   **Major Version:** 18
+*   **Minor Version:** 1
+*   **Valid:** 1
+
+### File Information
+
+*   **Backup Size:** 3.77 MB
+*   **Restore Size:** 6.20 MB
+*   **Biggest File Size:** 232.00 KB
+*   **Incremental Parent:** (None)
 ```
 
-## Tool: /backup
+Or 
 
-**Tool description**
-
-Create a full or incremental backup.
-
-**Arguments**
-
-- `server`: The pgmoneta server name.
-- Optional `backup_id`: Base backup label for incremental backup.
-
-**Behavior**
-
-- Without `backup_id`, the tool creates a full backup.
-- With `backup_id`, the tool creates an incremental backup based on that backup.
-- `username` is required by the MCP API and is typically injected by `pgmoneta-mcp-client`.
-
-**Examples**
-
-```text
-backup {"server":"primary"}
-backup {"server":"primary","backup_id":"latest"}
-backup {"server":"primary","backup_id":"20260706113507"}
 ```
+Took an incremental backup of the primary server successfully.
 
+The backup process for the **primary** server, running version **0.22.0**, was completed in about **2.3 seconds**.
+
+### **Backup Details**
+
+*   **Status:** Successful
+*   **Backup ID:** **20260726023426**
+*   **Type:** Incremental
+*   **Incremental Parent ID:** 20260726012935 (This backup was based on this ID)
+
+### **Storage & Recovery Information**
+
+*   **Backup Size:** 3.78 MB
+*   **Biggest File Size:** 3.35 MB
+*   **Restore Size:** 25.37 MB
+*   **Compression:** zstd
+*   **Encryption:** aes\_256\_gcm
+*   **Server:** primary
+*   **Server Version:** 0.22.0
+*   **Major Version:** 18
+*   **Minor Version:** 1
+*   **Valid:** Yes (1)
+```

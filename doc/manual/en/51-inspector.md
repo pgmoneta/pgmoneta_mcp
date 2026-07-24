@@ -142,4 +142,4 @@ Use JSON output if you want to pipe the response into another tool:
 pgmoneta-mcp-inspector inspector --conf /etc/pgmoneta-mcp/pgmoneta-mcp-inspector.conf tool call list_backups '{"server":"primary","sort":"desc"}' --output json
 ```
 
-For implementation details, see [Inspector internals](74-mcp-inspector.md).
+For implementation details, see [Inspector internals](75-mcp-inspector.md).

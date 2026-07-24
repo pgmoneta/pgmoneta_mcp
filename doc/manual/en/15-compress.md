@@ -11,50 +11,17 @@ Compress a file using the configured pgmoneta algorithm.
 ```text
 Compress /tmp/base.tar on the server
 ```
+
 Example Output:
 
 ```
-{
-    "Header": {
-        "ClientVersion": "0.21.0",
-        "Command": "compress",
-        "Compression": "zstd",
-        "Encryption": "aes_256_gcm",
-        "Output": 1,
-        "Timestamp": 20260718182311
-    },
-    "Outcome": {
-        "Status": true,
-        "Time": "00:00:0.0005"
-    },
-    "Request": {
-        "SourceFile": "/tmp/base.tar"
-    },
-    "Response": {
-        "DestinationFile": "/tmp/base.tar.zstd",
-        "ServerVersion": "0.22.0"
-    }
-}
+Compressed `/tmp/base.tar` on the server successfully.
+
+### Compression Details
+*   **Outcome:** Success
+*   **New Compressed File:** **`/tmp/base.tar.zstd`**
+*   **Server Version:** `0.22.0`
+
+### Timing
+*   The operation was completed in about 0 seconds.
 ```
-
-## Tool: /compress
-
-**Tool description**
-
-Compress a file using configured compression.
-
-**Arguments**
-
-- `file_path`: Path of the file to compress on the pgmoneta host.
-
-**Behavior**
-
-- The compression algorithm comes from the server-side pgmoneta configuration.
-- `username` is required by the MCP API and is typically injected by `pgmoneta-mcp-client`.
-
-**Examples**
-
-```text
-compress {"file_path":"/tmp/base.tar"}
-```
-

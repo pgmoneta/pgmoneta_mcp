@@ -290,7 +290,7 @@ impl PgmonetaClient {
         R: tokio::io::AsyncRead + Unpin,
     {
         // Read compression
-        let compression = match timeout(Duration::from_secs(10), stream.read_u8()).await {
+        let compression = match timeout(Duration::from_secs(100), stream.read_u8()).await {
             Ok(Ok(c)) => c,
             Ok(Err(e)) => {
                 return Err(anyhow!("Failed to read compression byte: {e}"));

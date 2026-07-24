@@ -17,7 +17,6 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use inquire::Select;
 use pgmoneta_mcp::configuration::{self, LlmConfiguration};
-use pgmoneta_mcp::handler::PgmonetaHandler;
 use pgmoneta_mcp::llm::{
     ChatMessage, LlmClient, LlmResponse, OllamaClient, OpenAiClient, ToolDefinition,
     mcp_tools_to_llm_schema,
@@ -84,8 +83,26 @@ You translate user requests into pgmoneta MCP tool invocations. \
 Always select the single best matching tool from the provided tool list and respond with a tool call instead of plain text. \
 Use arguments that are explicitly provided by the user and match the tool schema. \
 Do not invent values. Omit optional arguments when the user did not specify them. \
-If the user mentions a pgmoneta server name such as primary or standby, pass it through the tool's `server` argument. \
-Requests to backup a server, such as `Backup primary server` will call the `backup_server` tool.";
+If the user mentions a pgmoneta server name such as primary or standby, pass it through the tool's `server` argument.";
+const NATURAL_LANGUAGE_RENDER_SYSTEM_PROMPT: &str = "\
+You are a response formatter for pgmoneta MCP client output. \
+Given a user request, tool name, tool description, and raw JSON tool result, produce a concise, user-friendly markdown response. \
+\
+CRITICAL RULES: \
+1. Read the JSON carefully. Output ALL data from it. Every field, every value. Do not omit, summarize, or skip any information. \
+2. Restructure the JSON into clean markdown for readability, headings, bold labels, bullet points, or tables. \
+3. The prompt contains the operation that was performed. Use that to write your opening line (e.g. \"Created a full backup on primary...\"). \
+4. Bold the most important information with **info** (f.ex the last backup). \
+5. Never start with generic preambles like \"The following backup history is available\" or \"Here is the result\". \
+6. Never output raw JSON back to the user. \
+7. Humanize raw numbers: \
+   - Durations like \"00:00:2.2711\" → \"Completed in about 2 seconds\". \
+   - \"00:01:15.5000\" → \"Completed in about 1 minute and 16 seconds\". \
+   - \"01:30:00.0000\" → \"Completed in about 1 hour and 30 minutes\". \
+   - File sizes like \"3.77 MB\" are already human-readable, keep them as-is. \
+   - Timestamp IDs like 20260726011419 are identifiers, keep them as-is. \
+   - Never reformat backup IDs. \
+8. Never use emojis, icons, or unicode symbols (e.g. checkmarks, warning signs). Use plain text headings and labels only.";
 const HELP_TEXT: &str = "\
 Basic usage:
   /help                 Show this help
@@ -794,6 +811,8 @@ fn run_repl(
                         mode,
                         name,
                         args,
+                        None,
+                        None,
                     )?,
                     Ok(ClientCommand::NaturalLanguage(request)) => {
                         let Some(llm) = active_model.as_ref().and_then(|name| llms.get(name))
@@ -817,6 +836,8 @@ fn run_repl(
                                 mode,
                                 name,
                                 args,
+                                Some(&request),
+                                Some(llm),
                             )?,
                             Ok(_) => unreachable!(
                                 "natural-language translation must resolve to a tool call"
@@ -1051,180 +1072,32 @@ fn metric_sample_value(sample: &str) -> Option<&str> {
     None
 }
 
-fn format_json_value(value: Value, label: &str) -> Result<String> {
-    let value = humanize_json_value(normalize_json_value(value))?;
-    if let Value::String(text) = value {
-        return Ok(text);
-    }
-    if let Some(summary) = backup_response_summary(&value) {
-        return Ok(summary);
-    }
-    if let Some(summary) = backup_list_summary(&value) {
-        return Ok(summary);
-    }
-    if let Some(message) = empty_backups_message(&value) {
-        return Ok(message);
-    }
-    format_pretty_json(&value, label)
+fn format_json_value(value: Value, _label: &str) -> Result<String> {
+    let value = normalize_json_value(value);
+    let value = compress_for_llm(value);
+    Ok(serde_json::to_string(&value)?)
 }
 
-fn humanize_json_value(value: Value) -> Result<Value> {
-    let Value::Object(_) = &value else {
-        return Ok(value);
+fn compress_for_llm(value: Value) -> Value {
+    let Value::Object(mut map) = value else {
+        return value;
     };
 
-    let raw = serde_json::to_string(&value)
-        .map_err(|e| anyhow!("Failed to serialize JSON response for translation: {}", e))?;
+    let has_response = map.contains_key("Response");
 
-    match PgmonetaHandler::generate_call_tool_result_string(&raw) {
-        Ok(translated) => serde_json::from_str(&translated).map_err(|e| {
-            anyhow!(
-                "Failed to parse translated JSON response from pgmoneta formatter: {}",
-                e
-            )
-        }),
-        Err(_) => Ok(value),
+    map.remove("Header");
+    map.remove("Request");
+
+    if has_response && let Some(Value::Object(outcome)) = map.get_mut("Outcome") {
+        let status = outcome.remove("Status");
+        if let Some(status) = status {
+            outcome.insert(
+                "Success".to_string(),
+                Value::Bool(status == Value::Bool(true)),
+            );
+        }
     }
-}
-
-fn empty_backups_message(value: &Value) -> Option<String> {
-    if is_empty_backups_array(value.get("Backups")) {
-        return Some("No backups available.".to_string());
-    }
-
-    if is_empty_backups_array(
-        value
-            .get("Response")
-            .and_then(|response| response.get("Backups")),
-    ) {
-        return Some("No backups available.".to_string());
-    }
-
-    None
-}
-
-fn backup_list_summary(value: &Value) -> Option<String> {
-    let command = value
-        .get("Header")
-        .and_then(|header| header.get("Command"))
-        .and_then(Value::as_str);
-    if command != Some("list-backup") {
-        return None;
-    }
-
-    let response = value.get("Response")?.as_object()?;
-    let backups = response.get("Backups")?.as_array()?;
-    if backups.is_empty() {
-        return None;
-    }
-
-    let server = response
-        .get("Server")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
-    let pgmoneta_version = response
-        .get("ServerVersion")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
-    let major = value_to_display_string(response.get("MajorVersion")?)?;
-    let minor = value_to_display_string(response.get("MinorVersion")?)?;
-
-    let mut lines = vec![format!(
-        "{server} (pgmoneta {pgmoneta_version} w/ PostgreSQL {major}.{minor})"
-    )];
-    for backup in backups {
-        let backup = backup.as_object()?;
-        lines.push(format_backup_summary_line(backup)?);
-    }
-
-    Some(lines.join("\n"))
-}
-
-fn backup_response_summary(value: &Value) -> Option<String> {
-    let command = value
-        .get("Header")
-        .and_then(|header| header.get("Command"))
-        .and_then(Value::as_str);
-    if command != Some("backup") {
-        return None;
-    }
-
-    let response = value.get("Response")?.as_object()?;
-    let server = response
-        .get("Server")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
-    let pgmoneta_version = response
-        .get("ServerVersion")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
-    let major = value_to_display_string(response.get("MajorVersion")?)?;
-    let minor = value_to_display_string(response.get("MinorVersion")?)?;
-
-    Some(format!(
-        "{server} (pgmoneta {pgmoneta_version} w/ PostgreSQL {major}.{minor})\n{}",
-        format_backup_summary_line(response)?
-    ))
-}
-
-fn format_backup_summary_line(backup: &serde_json::Map<String, Value>) -> Option<String> {
-    let backup_id = value_to_display_string(backup.get("Backup")?)?;
-
-    let mut details = Vec::new();
-    details.push(backup_kind_label(backup.get("Incremental")).to_string());
-    if let Some(size) = backup.get("BackupSize").and_then(value_to_display_string) {
-        details.push(format!("Backup: {size}"));
-    }
-    if let Some(size) = backup.get("RestoreSize").and_then(value_to_display_string) {
-        details.push(format!("Restore: {size}"));
-    }
-    if let Some(validity) = backup_validity_label(backup.get("Valid")) {
-        details.push(validity.to_string());
-    }
-
-    let suffix = if details.is_empty() {
-        String::new()
-    } else {
-        format!(" | {}", details.join(", "))
-    };
-    Some(format!("• {backup_id}{suffix}"))
-}
-
-fn value_to_display_string(value: &Value) -> Option<String> {
-    match value {
-        Value::String(text) => Some(text.clone()),
-        Value::Number(number) => Some(number.to_string()),
-        Value::Bool(boolean) => Some(boolean.to_string()),
-        _ => None,
-    }
-}
-
-fn backup_validity_label(value: Option<&Value>) -> Option<&'static str> {
-    match value {
-        Some(Value::Bool(true)) => Some("Valid"),
-        Some(Value::Bool(false)) => Some("Invalid"),
-        Some(Value::Number(number)) if number.as_u64() == Some(1) => Some("Valid"),
-        Some(Value::Number(number)) if number.as_u64() == Some(0) => Some("Invalid"),
-        Some(Value::String(text)) if text.eq_ignore_ascii_case("true") => Some("Valid"),
-        Some(Value::String(text)) if text.eq_ignore_ascii_case("false") => Some("Invalid"),
-        Some(Value::String(text)) if text == "1" => Some("Valid"),
-        Some(Value::String(text)) if text == "0" => Some("Invalid"),
-        _ => None,
-    }
-}
-
-fn backup_kind_label(value: Option<&Value>) -> &'static str {
-    match value {
-        Some(Value::Bool(true)) => "Incremental",
-        Some(Value::Number(number)) if number.as_u64() == Some(1) => "Incremental",
-        Some(Value::String(text)) if text.eq_ignore_ascii_case("true") => "Incremental",
-        Some(Value::String(text)) if text == "1" => "Incremental",
-        _ => "Full",
-    }
-}
-
-fn is_empty_backups_array(value: Option<&Value>) -> bool {
-    matches!(value, Some(Value::Array(backups)) if backups.is_empty())
+    Value::Object(map)
 }
 
 fn normalize_json_value(value: Value) -> Value {
@@ -1480,6 +1353,8 @@ fn execute_tool_command(
     mode: ClientMode,
     name: String,
     args: HashMap<String, Value>,
+    natural_language_request: Option<&str>,
+    response_llm: Option<&ConfiguredLlm>,
 ) -> Result<()> {
     let tool = tools
         .iter()
@@ -1502,11 +1377,34 @@ fn execute_tool_command(
     match runtime.block_on(client.call_tool(name.clone(), args)) {
         Ok(result) => match mode {
             ClientMode::User => {
-                if name == "metric" {
-                    println!("{}", format_metric_tool_result(&result)?);
+                let base_output = if name == "metric" {
+                    format_metric_tool_result(&result)?
                 } else {
-                    println!("{}", format_tool_result(&result)?);
-                }
+                    format_tool_result(&result)?
+                };
+
+                let output =
+                    if let (Some(request), Some(llm)) = (natural_language_request, response_llm) {
+                        let tool_description = tool
+                            .description
+                            .as_ref()
+                            .map(|desc| sanitize_tool_description(desc))
+                            .filter(|desc| !desc.trim().is_empty())
+                            .unwrap_or_else(|| "No description available.".to_string());
+                        runtime
+                            .block_on(postprocess_tool_output_markdown(
+                                llm,
+                                request,
+                                &name,
+                                &tool_description,
+                                &base_output,
+                            ))
+                            .unwrap_or(base_output)
+                    } else {
+                        base_output
+                    };
+
+                println!("{}", ensure_user_mode_markdown_output(&output)?);
             }
             ClientMode::Developer => {
                 if name == "metric" {
@@ -1520,6 +1418,88 @@ fn execute_tool_command(
     }
 
     Ok(())
+}
+
+async fn postprocess_tool_output_markdown<T: LlmClient>(
+    llm: &T,
+    user_request: &str,
+    tool_name: &str,
+    tool_description: &str,
+    tool_output: &str,
+) -> Result<String> {
+    let prompt =
+        postprocess_tool_output_prompt(user_request, tool_name, tool_description, tool_output);
+
+    match llm
+        .chat(
+            &[
+                ChatMessage::system(NATURAL_LANGUAGE_RENDER_SYSTEM_PROMPT),
+                ChatMessage::user(&prompt),
+            ],
+            &[],
+        )
+        .await?
+    {
+        LlmResponse::Text(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                bail!("LLM returned an empty rendered response")
+            }
+            if looks_like_json_output(trimmed) {
+                bail!("LLM returned JSON instead of markdown")
+            }
+            Ok(trimmed.to_string())
+        }
+        LlmResponse::ToolCalls(_) => {
+            bail!("LLM attempted tool calls while rendering final output")
+        }
+    }
+}
+
+fn postprocess_tool_output_prompt(
+    user_request: &str,
+    tool_name: &str,
+    tool_description: &str,
+    tool_output: &str,
+) -> String {
+    format!(
+        "User request:\n{user_request}\n\nTool used:\n{tool_name}\n\nTool description:\n{tool_description}\n\nTool output:\n{tool_output}\n\nWrite the final user response in markdown."
+    )
+}
+
+fn looks_like_json_output(text: &str) -> bool {
+    if serde_json::from_str::<Value>(text).is_ok() {
+        return true;
+    }
+
+    let trimmed = text.trim_start();
+    trimmed.starts_with("```json") || trimmed.starts_with("```")
+}
+
+fn ensure_user_mode_markdown_output(output: &str) -> Result<String> {
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return Ok(output.to_string());
+    }
+
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        return format_json_value(value, "JSON response");
+    }
+
+    if let Some(json_block) = extract_json_code_block(trimmed)
+        && let Ok(value) = serde_json::from_str::<Value>(json_block)
+    {
+        return format_json_value(value, "JSON response");
+    }
+
+    Ok(output.to_string())
+}
+
+fn extract_json_code_block(text: &str) -> Option<&str> {
+    let start = text.find("```json")?;
+    let after_tag = &text[start + "```json".len()..];
+    let end = after_tag.find("```")?;
+    Some(after_tag[..end].trim())
 }
 
 fn sanitize_user_arguments(
@@ -2189,12 +2169,13 @@ mod tests {
         ToolDefinition {
             tool_type: "function".to_string(),
             function: pgmoneta_mcp::llm::FunctionDefinition {
-                name: "backup_server".to_string(),
-                description: "Create a full backup".to_string(),
+                name: "backup".to_string(),
+                description: "Create a full or incremental backup".to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "server": { "type": "string" }
+                        "server": { "type": "string" },
+                        "backup_id": { "type": "string" }
                     }
                 }),
             },
@@ -3008,11 +2989,10 @@ mod tests {
             RawContent::text(r#"{"Outcome":"Success","Count":2}"#).no_annotation(),
         ]);
 
-        let formatted = format_tool_result(&result).unwrap();
-        let parsed: Value = serde_json::from_str(&formatted).unwrap();
-        assert_eq!(parsed, json!({"Outcome":"Success","Count":2}));
-        assert!(formatted.contains('\n'));
-        assert!(formatted.contains("    \""));
+        assert_eq!(
+            format_tool_result(&result).unwrap(),
+            r#"{"Count":2,"Outcome":"Success"}"#
+        );
     }
 
     #[test]
@@ -3021,9 +3001,10 @@ mod tests {
             RawContent::text(r#"{"Outcome":"Success","BackupSize":2048}"#).no_annotation(),
         ]);
 
-        let formatted = format_tool_result(&result).unwrap();
-        let parsed: Value = serde_json::from_str(&formatted).unwrap();
-        assert_eq!(parsed, json!({"Outcome":"Success","BackupSize":"2.00 KB"}));
+        assert_eq!(
+            format_tool_result(&result).unwrap(),
+            r#"{"BackupSize":2048,"Outcome":"Success"}"#
+        );
     }
 
     #[test]
@@ -3043,7 +3024,7 @@ mod tests {
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
-            "Hello from pgmoneta MCP server!"
+            r#""Hello from pgmoneta MCP server!""#
         );
     }
 
@@ -3063,20 +3044,20 @@ mod tests {
     fn test_format_tool_result_prefers_structured_content() {
         let result = CallToolResult::structured(json!({"status":"ok","count":1}));
 
-        let formatted = format_tool_result(&result).unwrap();
-        let parsed: Value = serde_json::from_str(&formatted).unwrap();
-        assert_eq!(parsed, json!({"status":"ok","count":1}));
-        assert!(formatted.contains('\n'));
-        assert!(formatted.contains("    \""));
+        assert_eq!(
+            format_tool_result(&result).unwrap(),
+            r#"{"count":1,"status":"ok"}"#
+        );
     }
 
     #[test]
     fn test_format_tool_result_humanizes_structured_pgmoneta_content() {
         let result = CallToolResult::structured(json!({"Outcome":"Success","BackupSize":1024}));
 
-        let formatted = format_tool_result(&result).unwrap();
-        let parsed: Value = serde_json::from_str(&formatted).unwrap();
-        assert_eq!(parsed, json!({"Outcome":"Success","BackupSize":"1.00 KB"}));
+        assert_eq!(
+            format_tool_result(&result).unwrap(),
+            r#"{"BackupSize":1024,"Outcome":"Success"}"#
+        );
     }
 
     #[test]
@@ -3131,7 +3112,7 @@ mod tests {
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
-            "primary (pgmoneta 0.21.0 w/ PostgreSQL 18.3)\n• 20260410142257 | Full, Backup: 8.45 MB, Restore: 8.44 MB, Valid"
+            r#"{"Outcome":{"Success":true,"Time":"00:00:0.0160"},"Response":{"Backups":[{"Backup":20260410142257,"BackupSize":"8.45 MB","BiggestFileSize":"328.00 KB","Comments":null,"Compression":18,"Encryption":"aes_256_gcm","Incremental":false,"IncrementalParent":null,"Keep":false,"RestoreSize":"8.44 MB","Server":"primary","Valid":1,"WAL":0}],"MajorVersion":18,"MinorVersion":3,"NumberOfBackups":1,"Server":"primary","ServerVersion":"0.21.0"}}"#
         );
     }
 
@@ -3177,7 +3158,38 @@ mod tests {
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
-            "primary (pgmoneta 0.21.0 w/ PostgreSQL 18.3)\n• 20260412082050 | Full, Backup: 5.29 MB, Restore: 8.44 MB, Valid"
+            r#"{"Outcome":{"Success":true,"Time":"00:00:2.2711"},"Response":{"Backup":20260412082050,"BackupSize":"5.29 MB","BiggestFileSize":"328.00 KB","Compression":"zstd","Encryption":"aes_256_gcm","Incremental":false,"IncrementalParent":"","MajorVersion":18,"MinorVersion":3,"RestoreSize":"8.44 MB","Server":"primary","ServerVersion":"0.21.0","Valid":1}}"#
+        );
+    }
+
+    #[test]
+    fn test_format_tool_result_summarizes_incremental_backup_response_with_base() {
+        let result = CallToolResult::success(vec![
+            RawContent::text(
+                r#"{
+                "Header": {
+                    "Command": "backup"
+                },
+                "Response": {
+                    "Backup": 20260725202010,
+                    "BackupSize": "1.25 MB",
+                    "Incremental": true,
+                    "IncrementalParent": "20260725201041",
+                    "MajorVersion": 18,
+                    "MinorVersion": 1,
+                    "RestoreSize": "6.20 MB",
+                    "Server": "primary",
+                    "ServerVersion": "0.22.0",
+                    "Valid": 1
+                }
+            }"#,
+            )
+            .no_annotation(),
+        ]);
+
+        assert_eq!(
+            format_tool_result(&result).unwrap(),
+            r#"{"Response":{"Backup":20260725202010,"BackupSize":"1.25 MB","Incremental":true,"IncrementalParent":20260725201041,"MajorVersion":18,"MinorVersion":1,"RestoreSize":"6.20 MB","Server":"primary","ServerVersion":"0.22.0","Valid":1}}"#
         );
     }
 
@@ -3254,27 +3266,12 @@ mod tests {
     }
 
     #[test]
-    fn test_format_tool_result_reports_no_backups_for_empty_response_array() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#"{"Outcome":"Success","Response":{"Backups":[]}}"#).no_annotation(),
-        ]);
-
-        assert_eq!(
-            format_tool_result(&result).unwrap(),
-            "No backups available."
-        );
-    }
-
-    #[test]
     fn test_format_tool_result_unwraps_nested_json_string() {
         let result = CallToolResult::success(vec![
             RawContent::text(r#""{\"Header\":{\"Outcome\":\"Success\"}}""#).no_annotation(),
         ]);
 
-        let formatted = format_tool_result(&result).unwrap();
-        let parsed: Value = serde_json::from_str(&formatted).unwrap();
-        assert_eq!(parsed, json!({"Header":{"Outcome":"Success"}}));
-        assert!(formatted.contains("\n    \"Header\""));
+        assert_eq!(format_tool_result(&result).unwrap(), r#"{}"#);
     }
 
     #[tokio::test]
@@ -3348,5 +3345,23 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("did not select a tool"));
+    }
+
+    #[test]
+    fn test_postprocess_tool_output_prompt_includes_tool_description() {
+        let prompt = postprocess_tool_output_prompt(
+            "List backups on primary server",
+            "list_backups",
+            "List backups with sort control. Default sort is ascending.",
+            "- 20260718173645 | Full | Valid",
+        );
+
+        assert!(prompt.contains("User request:\nList backups on primary server"));
+        assert!(prompt.contains("Tool used:\nlist_backups"));
+        assert!(prompt.contains(
+            "Tool description:\nList backups with sort control. Default sort is ascending."
+        ));
+        assert!(prompt.contains("Tool output:\n- 20260718173645 | Full | Valid"));
+        assert!(prompt.ends_with("Write the final user response in markdown."));
     }
 }
