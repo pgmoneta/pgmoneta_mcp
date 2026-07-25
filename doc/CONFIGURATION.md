@@ -26,6 +26,7 @@ The other section, called `[pgmoneta]`, is where you configure connection with `
 | :------- | :------ | :--- | :------- | :---------- |
 | host | | String | Yes | The address of pgmoneta instance |
 | port | | Int | Yes | The port of pgmoneta instance |
+| base_dir | | String | Yes | The pgmoneta data directory. Required by the `walinfo` tool; WAL files are read from `<base_dir>/<server>/wal`. |
 | metrics | 5001 | Int | No | The port of the pgmoneta Prometheus metrics endpoint |
 
 ## [llm]

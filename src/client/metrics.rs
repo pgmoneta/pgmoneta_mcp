@@ -91,6 +91,7 @@ mod tests {
             pgmoneta: PgmonetaConfiguration {
                 host: host.to_string(),
                 port: 5000,
+                base_dir: "/tmp/pgmoneta".to_string(),
                 metrics: 5001,
                 compression: "zstd".to_string(),
                 encryption: "aes_256_gcm".to_string(),

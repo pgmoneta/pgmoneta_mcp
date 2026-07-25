@@ -30,6 +30,7 @@ pub mod retention;
 pub mod shutdown;
 pub mod status;
 pub mod verify;
+pub mod walinfo;
 
 use super::constant::*;
 use super::constant::{Command, Compression, Encryption};
@@ -82,6 +83,7 @@ impl PgmonetaHandler {
             .with_async_tool::<verify::VerifyBackupTool>()
             .with_async_tool::<delete::DeleteTool>()
             .with_async_tool::<status::StatusTool>()
+            .with_async_tool::<walinfo::WalInfoTool>()
     }
 }
 

@@ -55,11 +55,14 @@ log_path = /tmp/pgmoneta_mcp.log
 [pgmoneta]
 host = "localhost"
 port = 5000
+base_dir = /var/lib/pgmoneta
 metrics = 5001
 ```
 
 Note that `port` under the pgmoneta section has to match your management port configured earlier,
 while `metrics` should match pgmoneta's Prometheus endpoint.
+`base_dir` must match pgmoneta's data directory. It is required for the
+`walinfo` tool, which reads WAL files from `<base_dir>/<server>/wal`.
 is what you'll run your MCP server at.
 
 ## Run MCP server

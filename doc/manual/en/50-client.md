@@ -79,6 +79,7 @@ Take a backup for server primary
 List backups for server primary in descending order
 Get information about the latest backup for server primary
 Restore the latest backup for server primary to /tmp/pgmoneta-restore
+Show WAL activity for server primary around 4:02pm
 ```
 
 The client sends the available tool definitions to the active model, asks it to
@@ -111,6 +112,8 @@ backup {"server":"primary"}
 list_backups {"server":"primary","sort":"desc"}
 get_info {"server":"primary","backup_id":"latest"}
 restore {"server":"primary","backup_id":"latest","directory":"/tmp/pgmoneta-restore"}
+walinfo {"server":"primary"}
+walinfo {"server":"primary","time":"4:02pm","window_minutes":10}
 ```
 
 Switch back to user mode:
@@ -118,6 +121,10 @@ Switch back to user mode:
 ``` text
 /user
 ```
+
+For `walinfo`, the client supplies `mode: "user"` in user mode and
+`mode: "developer"` in developer mode when it is not specified. Supply `mode`
+explicitly to override this behavior.
 
 ## Runtime commands
 

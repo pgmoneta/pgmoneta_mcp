@@ -49,3 +49,30 @@ fn test_handler_default_trait() {
     assert!(info1.instructions.is_some());
     assert!(info2.instructions.is_some());
 }
+
+#[test]
+fn test_walinfo_tool_is_available() {
+    let tools = PgmonetaHandler::tool_router().list_all();
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
+
+    // Verify walinfo is registered
+    assert!(
+        tool_names.contains(&"walinfo"),
+        "walinfo tool should be in available tools, found: {:?}",
+        tool_names
+    );
+
+    // Verify walinfo has a description
+    let walinfo_tool = tools
+        .iter()
+        .find(|t| t.name == "walinfo")
+        .expect("walinfo tool not found");
+    assert!(
+        walinfo_tool
+            .description
+            .as_ref()
+            .map(|d| d.contains("WAL"))
+            .unwrap_or(false),
+        "walinfo tool should have a description containing 'WAL'"
+    );
+}

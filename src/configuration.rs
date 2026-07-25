@@ -57,6 +57,8 @@ pub struct PgmonetaConfiguration {
     pub host: String,
     /// The port of the pgmoneta instance (Required).
     pub port: i32,
+    /// The base directory where pgmoneta stores its data.
+    pub base_dir: String,
     /// The port of the pgmoneta Prometheus metrics endpoint. Default: 5001.
     #[serde(default = "default_metrics_port")]
     pub metrics: i32,
@@ -522,7 +524,7 @@ mod tests {
 
         writeln!(
             config_file,
-            "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\n"
+            "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\n\nbase_dir = /tmp/pgmoneta\n"
         )
         .unwrap();
         writeln!(user_file, "[admins]\nadmin = encrypted-password\n").unwrap();
@@ -543,7 +545,7 @@ mod tests {
 
         writeln!(
             config_file,
-            "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\nmetrics = 7001\n"
+            "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\nbase_dir = /tmp/pgmoneta\nmetrics = 7001\n"
         )
         .unwrap();
         writeln!(user_file, "[admins]\nadmin = encrypted-password\n").unwrap();
