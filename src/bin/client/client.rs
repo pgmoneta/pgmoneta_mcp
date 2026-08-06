@@ -2131,7 +2131,7 @@ impl LlmClient for ConfiguredLlm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::{AnnotateAble, RawContent};
+    use rmcp::model::ContentBlock;
     use rustyline::Context as ReadlineContext;
     use serde_json::json;
 
@@ -2985,9 +2985,9 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_pretty_prints_json_text() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#"{"Outcome":"Success","Count":2}"#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{"Outcome":"Success","Count":2}"#,
+        )]);
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
@@ -2997,9 +2997,9 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_humanizes_pgmoneta_json_text() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#"{"Outcome":"Success","BackupSize":2048}"#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{"Outcome":"Success","BackupSize":2048}"#,
+        )]);
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
@@ -3009,18 +3009,16 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_returns_plain_text_when_not_json() {
-        let result = CallToolResult::success(vec![
-            RawContent::text("plain text response").no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text("plain text response")]);
 
         assert_eq!(format_tool_result(&result).unwrap(), "plain text response");
     }
 
     #[test]
     fn test_format_tool_result_unquotes_json_string_text() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#""Hello from pgmoneta MCP server!""#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#""Hello from pgmoneta MCP server!""#,
+        )]);
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
@@ -3030,9 +3028,9 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_developer_keeps_json_string_quotes() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#""Hello from pgmoneta MCP server!""#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#""Hello from pgmoneta MCP server!""#,
+        )]);
 
         assert_eq!(
             format_tool_result_developer(&result).unwrap(),
@@ -3062,9 +3060,8 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_summarizes_backup_list_response() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(
-                r#"{
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{
                 "Header": {
                     "ClientVersion": "0.21.0",
                     "Command": "list-backup",
@@ -3106,9 +3103,7 @@ mod tests {
                     "ServerVersion": "0.21.0"
                 }
             }"#,
-            )
-            .no_annotation(),
-        ]);
+        )]);
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
@@ -3118,9 +3113,8 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_summarizes_backup_response() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(
-                r#"{
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{
                 "Header": {
                     "ClientVersion": "0.21.0",
                     "Command": "backup",
@@ -3152,9 +3146,7 @@ mod tests {
                     "Valid": 1
                 }
             }"#,
-            )
-            .no_annotation(),
-        ]);
+        )]);
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
@@ -3164,9 +3156,8 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_summarizes_incremental_backup_response_with_base() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(
-                r#"{
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{
                 "Header": {
                     "Command": "backup"
                 },
@@ -3183,9 +3174,7 @@ mod tests {
                     "Valid": 1
                 }
             }"#,
-            )
-            .no_annotation(),
-        ]);
+        )]);
 
         assert_eq!(
             format_tool_result(&result).unwrap(),
@@ -3195,9 +3184,9 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_developer_preserves_full_json_response() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#"{"Outcome":"Success","BackupSize":1024}"#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{"Outcome":"Success","BackupSize":1024}"#,
+        )]);
 
         let formatted = format_tool_result_developer(&result).unwrap();
         let parsed: Value = serde_json::from_str(&formatted).unwrap();
@@ -3219,21 +3208,18 @@ mod tests {
 
     #[test]
     fn test_format_metric_tool_result_extracts_value_for_user_mode() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#"pgmoneta_version{version="0.22.0"} 1"#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"pgmoneta_version{version="0.22.0"} 1"#,
+        )]);
 
         assert_eq!(format_metric_tool_result(&result).unwrap(), "1");
     }
 
     #[test]
     fn test_format_metric_tool_result_preserves_multiple_metric_lines() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(
-                "pgmoneta_retention_server{server=\"primary\"} 7\npgmoneta_retention_server{server=\"standby\"} 14",
-            )
-            .no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            "pgmoneta_retention_server{server=\"primary\"} 7\npgmoneta_retention_server{server=\"standby\"} 14",
+        )]);
 
         assert_eq!(
             format_metric_tool_result(&result).unwrap(),
@@ -3243,9 +3229,9 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_developer_preserves_full_metric_line() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#"pgmoneta_version{version="0.22.0"} 1"#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"pgmoneta_version{version="0.22.0"} 1"#,
+        )]);
 
         assert_eq!(
             format_tool_result_developer(&result).unwrap(),
@@ -3255,9 +3241,9 @@ mod tests {
 
     #[test]
     fn test_format_metric_tool_result_developer_unescapes_json_string_metric_line() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#""pgmoneta_version{version=\"0.22.0\"} 1""#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#""pgmoneta_version{version=\"0.22.0\"} 1""#,
+        )]);
 
         assert_eq!(
             format_metric_tool_result_developer(&result).unwrap(),
@@ -3267,9 +3253,9 @@ mod tests {
 
     #[test]
     fn test_format_tool_result_unwraps_nested_json_string() {
-        let result = CallToolResult::success(vec![
-            RawContent::text(r#""{\"Header\":{\"Outcome\":\"Success\"}}""#).no_annotation(),
-        ]);
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#""{\"Header\":{\"Outcome\":\"Success\"}}""#,
+        )]);
 
         assert_eq!(format_tool_result(&result).unwrap(), r#"{}"#);
     }
