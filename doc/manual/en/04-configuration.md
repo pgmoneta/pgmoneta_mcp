@@ -63,9 +63,9 @@ port = 5000
 metrics = 5001
 
 [llm]
-provider = ollama
-endpoint = http://localhost:11434
-model = qwen2.5:3b
+provider = openai
+endpoint = http://localhost:8100/v1
+model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
 ```
 
@@ -128,8 +128,8 @@ backup management. See the **Local LLM** chapter or
 
 | Property | Default | Unit | Required | Description |
 | :------- | :------ | :--- | :------- | :---------- |
-| `provider` | - | String | Yes | The local LLM backend: `ollama`, `llama.cpp`, `ramalama`, or `vllm` |
-| `endpoint` | - | String | Yes | The URL of the LLM inference server. For `llama.cpp`, `ramalama`, and `vllm`, either the server root URL or the OpenAI-compatible `/v1` URL can be configured |
+| `provider` | - | String | Yes | Must be `openai` |
+| `endpoint` | - | String | Yes | OpenAI API URL, normally ending in `/v1` |
 | `model` | - | String | Yes | The model name to use for inference |
 | `max_tool_rounds` | `10` | Int | No | Maximum tool-calling iterations per user prompt |
 
@@ -171,12 +171,12 @@ Example:
 [pgmoneta_mcp_client]
 url = http://localhost:8000/mcp
 timeout = 30
-model = qwen
+model = gemma
 
-[qwen]
-provider = ollama
-endpoint = http://localhost:11434
-model = qwen2.5:3b
+[gemma]
+provider = openai
+endpoint = http://localhost:8100/v1
+model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
 ```
 
@@ -189,7 +189,7 @@ The `[pgmoneta_mcp_client]` section controls the MCP connection.
 | `model` | No | - | Default named LLM profile for natural-language requests |
 
 Any other section in the client file is treated as a named LLM profile. In the
-example above, `[qwen]` is the profile name. If exactly one profile is present,
+example above, `[gemma]` is the profile name. If exactly one profile is present,
 the client can select it automatically. If multiple profiles are present,
 `[pgmoneta_mcp_client].model` must name the default profile.
 
@@ -197,8 +197,8 @@ Named client LLM profiles use the same keys as `[llm]`:
 
 | Property | Required | Default | Description |
 | :------- | :------- | :------ | :---------- |
-| `provider` | Yes | - | Backend provider: `ollama`, `llama.cpp`, `ramalama`, or `vllm` |
-| `endpoint` | Yes | - | Provider endpoint URL |
+| `provider` | Yes | - | Must be `openai` |
+| `endpoint` | Yes | - | OpenAI API URL |
 | `model` | Yes | - | Model identifier |
 | `max_tool_rounds` | No | `10` | Maximum tool-calling iterations per prompt |
 

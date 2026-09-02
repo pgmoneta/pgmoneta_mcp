@@ -417,7 +417,7 @@ fn parse_client_llm_profiles(
 
 fn validate_llm_provider(provider: &str) -> anyhow::Result<()> {
     match provider.to_lowercase().as_str() {
-        "ollama" | "llama.cpp" | "ramalama" | "vllm" => Ok(()),
+        "openai" => Ok(()),
         _ => Err(anyhow!("Unsupported LLM provider '{}'", provider)),
     }
 }
@@ -448,7 +448,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             file,
-            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\ntimeout = 15\n\n[llm]\nprovider = ollama\nendpoint = http://localhost:11434\nmodel = qwen2.5:3b\nmax_tool_rounds = 7\n"
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\ntimeout = 15\n\n[llm]\nprovider = openai\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\nmax_tool_rounds = 7\n"
         )
         .unwrap();
 
@@ -459,9 +459,9 @@ mod tests {
         assert_eq!(conf.client.model, "llm");
 
         let llm = conf.llms.get("llm").unwrap();
-        assert_eq!(llm.provider, "ollama");
-        assert_eq!(llm.endpoint, "http://localhost:11434");
-        assert_eq!(llm.model, "qwen2.5:3b");
+        assert_eq!(llm.provider, "openai");
+        assert_eq!(llm.endpoint, "http://localhost:8100/v1");
+        assert_eq!(llm.model, "ggml-org/gemma-4-E4B-it-GGUF");
         assert_eq!(llm.max_tool_rounds, 7);
     }
 
@@ -487,16 +487,16 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             file,
-            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\nmodel = qwen\n\n[qwen]\nprovider = ollama\nendpoint = http://localhost:11434\nmodel = qwen2.5:7b\n\n[gemma]\nprovider = llama.cpp\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-3-4b-it-GGUF\n"
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\nmodel = gemma\n\n[gemma]\nprovider = openai\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\n\n[coder]\nprovider = openai\nendpoint = http://localhost:8200/v1\nmodel = unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\n"
         )
         .unwrap();
 
         let conf = load_client_configuration(file.path().to_str().unwrap()).unwrap();
 
-        assert_eq!(conf.client.model, "qwen");
+        assert_eq!(conf.client.model, "gemma");
         assert_eq!(conf.llms.len(), 2);
-        assert_eq!(conf.llms.get("qwen").unwrap().provider, "ollama");
-        assert_eq!(conf.llms.get("gemma").unwrap().provider, "llama.cpp");
+        assert_eq!(conf.llms.get("gemma").unwrap().provider, "openai");
+        assert_eq!(conf.llms.get("coder").unwrap().provider, "openai");
     }
 
     #[test]
@@ -504,7 +504,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             file,
-            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\n\n[qwen]\nprovider = ollama\nendpoint = http://localhost:11434\nmodel = qwen2.5:7b\n\n[gemma]\nprovider = llama.cpp\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-3-4b-it-GGUF\n"
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\n\n[gemma]\nprovider = openai\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\n\n[coder]\nprovider = openai\nendpoint = http://localhost:8200/v1\nmodel = unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\n"
         )
         .unwrap();
 

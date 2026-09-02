@@ -18,8 +18,7 @@ use clap::Parser;
 use inquire::Select;
 use pgmoneta_mcp::configuration::{self, LlmConfiguration};
 use pgmoneta_mcp::llm::{
-    ChatMessage, LlmClient, LlmResponse, OllamaClient, OpenAiClient, ToolDefinition,
-    mcp_tools_to_llm_schema,
+    ChatMessage, LlmClient, LlmResponse, OpenAiClient, ToolDefinition, mcp_tools_to_llm_schema,
 };
 use pgmoneta_mcp::mcp_client::McpClient;
 use rmcp::model::{CallToolResult, Tool};
@@ -278,7 +277,6 @@ impl InterruptState {
 }
 
 enum ConfiguredLlm {
-    Ollama(OllamaClient),
     OpenAi(OpenAiClient),
 }
 
@@ -1874,11 +1872,7 @@ async fn active_model_reachable(
 
 fn probe_urls(probe: &LlmStatusProbe) -> Vec<String> {
     match probe.provider.to_lowercase().as_str() {
-        "ollama" => {
-            let base = probe.endpoint.trim_end_matches('/');
-            vec![format!("{base}/api/tags"), format!("{base}/")]
-        }
-        "llama.cpp" | "ramalama" | "vllm" => {
+        "openai" => {
             let base = normalize_openai_compatible_endpoint(&probe.endpoint);
             vec![format!("{base}/health"), format!("{base}/v1/models")]
         }
@@ -2098,11 +2092,7 @@ fn format_tool_arguments(schema: &serde_json::Map<String, Value>) -> String {
 impl ConfiguredLlm {
     fn from_configuration(configuration: &LlmConfiguration) -> Result<Self> {
         match configuration.provider.to_lowercase().as_str() {
-            "ollama" => Ok(Self::Ollama(OllamaClient::new(
-                &configuration.endpoint,
-                &configuration.model,
-            ))),
-            "llama.cpp" | "ramalama" | "vllm" => Ok(Self::OpenAi(OpenAiClient::new(
+            "openai" => Ok(Self::OpenAi(OpenAiClient::new(
                 &configuration.provider,
                 &configuration.endpoint,
                 &configuration.model,
@@ -2122,7 +2112,6 @@ impl LlmClient for ConfiguredLlm {
         tools: &[ToolDefinition],
     ) -> Result<LlmResponse> {
         match self {
-            Self::Ollama(client) => client.chat(messages, tools).await,
             Self::OpenAi(client) => client.chat(messages, tools).await,
         }
     }
@@ -2772,7 +2761,7 @@ mod tests {
     fn test_probe_urls_use_v1_models_for_openai_compatible_endpoint() {
         let probe = LlmStatusProbe {
             model: "ggml-org/gemma-4-E4B-it-GGUF".to_string(),
-            provider: "llama.cpp".to_string(),
+            provider: "openai".to_string(),
             endpoint: "http://localhost:8100/v1".to_string(),
         };
 
@@ -2830,7 +2819,7 @@ mod tests {
                 "gemma".to_string(),
                 LlmStatusProbe {
                     model: "ggml-org/gemma-4-E4B-it-GGUF".to_string(),
-                    provider: "llama.cpp".to_string(),
+                    provider: "openai".to_string(),
                     endpoint: "http://localhost:8100/v1".to_string(),
                 },
             ),
@@ -2838,7 +2827,7 @@ mod tests {
                 "qwen".to_string(),
                 LlmStatusProbe {
                     model: "qwen2.5:3b".to_string(),
-                    provider: "ollama".to_string(),
+                    provider: "openai".to_string(),
                     endpoint: "http://localhost:11434".to_string(),
                 },
             ),
@@ -2846,10 +2835,10 @@ mod tests {
 
         assert_eq!(
             format_list_models(&probes),
-            "Name   Model                         Provider \n\
-             -----  ----------------------------  ---------\n\
-             gemma  ggml-org/gemma-4-E4B-it-GGUF  llama.cpp\n\
-             qwen   qwen2.5:3b                    ollama   "
+            "Name   Model                         Provider\n\
+             -----  ----------------------------  --------\n\
+             gemma  ggml-org/gemma-4-E4B-it-GGUF  openai  \n\
+             qwen   qwen2.5:3b                    openai  "
         );
     }
 

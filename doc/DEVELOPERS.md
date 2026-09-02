@@ -397,18 +397,12 @@ Create `pgmoneta-mcp-client.conf`:
 [pgmoneta_mcp_client]
 url = http://localhost:8000/mcp
 timeout = 30
-model = qwen
-
-[qwen]
-provider = ollama
-endpoint = http://localhost:11434
-model = qwen2.5:3b
-max_tool_rounds = 10
+model = gemma
 
 [gemma]
-provider = llama.cpp
+provider = openai
 endpoint = http://localhost:8100/v1
-model = ggml-org/gemma-3-4b-it-GGUF
+model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
 ```
 
@@ -429,8 +423,8 @@ The section name is the profile name exposed by `/model [name]` and Tab completi
 
 | Key | Required | Description |
 |------|----------|-------------|
-| `provider` | Yes | `ollama`, `llama.cpp`, `ramalama`, or `vllm` |
-| `endpoint` | Yes | LLM server URL. For `llama.cpp`, `ramalama`, and `vllm`, configure either the server root URL or the OpenAI-compatible `/v1` URL. |
+| `provider` | Yes | Must be `openai` |
+| `endpoint` | Yes | OpenAI API URL, normally ending in `/v1` |
 | `model` | Yes | Model identifier used for tool selection |
 | `max_tool_rounds` | No | Accepted for compatibility with the shared LLM config block. Default: `10` |
 

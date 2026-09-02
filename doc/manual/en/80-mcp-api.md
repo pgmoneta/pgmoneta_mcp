@@ -661,7 +661,7 @@ path = /tmp/pgmoneta-mcp.log
 password = <encrypted_password_base64>
 ```
 
-See [Configuration documentation](../CONFIGURATION.md) for complete details.
+See [CONFIGURATION.md](../CONFIGURATION.md) for complete details.
 
 **Usage Example**
 

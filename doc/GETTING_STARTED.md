@@ -99,13 +99,12 @@ discover available tool.
 Open a chat (shortcut: Ctrl + Alt + I). Try asking your model to ask the server to say hello, or query
 your latest backup info!
 
-## Use local LLM models
+## Use a local LLM
 
-pgmoneta MCP supports using open-source LLM models locally without network access through
-[Ollama](https://ollama.com). This allows you to interact with your backups using AI without
-relying on cloud services.
+The native client communicates through the OpenAI API. The documented local
+server is `orangu-server`.
 
-See [LOCAL_LLM.md](LOCAL_LLM.md) for installation and configuration instructions.
+See [LOCAL_LLM.md](../LOCAL_LLM.md) for installation and configuration instructions.
 
 ## Closing
 

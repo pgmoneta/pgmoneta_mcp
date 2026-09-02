@@ -143,18 +143,29 @@ The quickest way to try pgmoneta_mcp is the native terminal client,
 username automatically, and can run both natural-language requests and direct
 tool calls.
 
+Initialize `orangu-server`, download the model recommended by the latest
+Orangu getting-started guide, and start its OpenAI API:
+
+``` sh
+orangu-server -i
+orangu-server download ggml-org/gemma-4-E4B-it-GGUF
+orangu-server --all ggml-org/gemma-4-E4B-it-GGUF
+```
+
+Keep `orangu-server` running in that terminal.
+
 Create a client configuration file called `pgmoneta-mcp-client.conf`:
 
 ``` ini
 [pgmoneta_mcp_client]
-url = http://localhost:8000/mcp
+url = http://localhost:6432/mcp
 timeout = 30
-model = qwen
+model = gemma
 
-[qwen]
-provider = ollama
-endpoint = http://localhost:11434
-model = qwen2.5:3b
+[gemma]
+provider = openai
+endpoint = http://localhost:8100/v1
+model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
 ```
 
@@ -381,44 +392,6 @@ pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin user edit
 ``` sh
 pgmoneta-mcp-admin -f pgmoneta-mcp-users.conf -U admin user del
 ```
-
-## Using a local LLM
-
-You can pair the **pgmoneta_mcp** native client with a local LLM runtime for a fully local (needed for the `/user` language interaction),
-tool-driven assistant workflow.
-
-Add an `[llm]` section to `pgmoneta-mcp-client.conf`:
-
-``` ini
-[llm]
-provider = ollama
-endpoint = http://localhost:11434
-model = llama3.1
-max_tool_rounds = 10
-```
-and set the **model** (under the **pgmoneta_mcp_client** section) to the name of the llm section.
-
-```ini
-[pgmoneta_mcp_client]
-url = http://localhost:6432/mcp
-timeout = 30
-model = gemma
-
-[qwen]
-provider = ollama
-endpoint = http://localhost:11434
-model = qwen2.5:3b
-max_tool_rounds = 10
-
-[gemma]
-provider = llama.cpp
-endpoint = http://localhost:8100/v1
-model = ggml-org/gemma-4-E4B-it-GGUF
-```
-
-See the **Local LLM** and **Ollama** chapters in the
-[manual](https://github.com/pgmoneta/pgmoneta_mcp/tree/main/doc/manual/en) for the
-full setup, including model selection, validation, and configuration details.
 
 ## Verifying the setup
 
