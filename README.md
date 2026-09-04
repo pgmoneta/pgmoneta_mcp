@@ -17,49 +17,34 @@ User management is done with the administration tool called `pgmoneta-mcp-admin`
 Interactive tool execution is available through `pgmoneta-mcp-client`, while
 `pgmoneta-mcp-inspector` provides a more structured inspection CLI.
 
-## Local LLM Support
+## OpenAI API support
 
-**pgmoneta MCP** supports local installation of Open Source LLM models that can run without network access.
+The native **pgmoneta MCP** client communicates with language models through the
+OpenAI API. For a local model, the documented server is
+[orangu-server](https://github.com/mnemosyne-systems/orangu).
 
-LLMs
-
-* [Ollama](https://ollama.com)
-* [llama.cpp](https://github.com/ggml-org/llama.cpp)
-* [ramalama](https://ramalama.ai/)
-
-Models
-
-* [Llama](https://ollama.com/library/llama3.1)
-* [Qwen](https://ollama.com/library/qwen2.5)
-* [Kimi](https://ollama.com/library/kimi-k2)
-* [mistral](https://huggingface.co/mistralai/Mistral-7B-v0.3)
-* [mixtral](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1)
-
-See [doc/LOCAL_LLM.md](doc/LOCAL_LLM.md) for installation and configuration instructions.
-
-Quick copy/paste example (llama.cpp):
+Start an installed model:
 
 ```sh
-llama-server \
-  -hf ggml-org/gemma-4-E4B-it-GGUF \
-  --alias "ggml-org/gemma-4-E4B-it-GGUF" \
-  --port 8100 \
-  --ctx-size 65536 \
-  --reasoning-budget 512 \
-  -t 4
+orangu-server --all ggml-org/gemma-4-E4B-it-GGUF
 ```
+
+Point `pgmoneta-mcp-client` at its OpenAI endpoint:
 
 ```ini
 [pgmoneta_mcp_client]
 url = http://localhost:6432/mcp
 timeout = 30
+model = gemma
 
 [gemma]
-provider = llama.cpp
+provider = openai
 endpoint = http://localhost:8100/v1
 model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
 ```
+
+See [doc/LOCAL_LLM.md](doc/LOCAL_LLM.md) for the setup.
 
 ## Compiling the source
 

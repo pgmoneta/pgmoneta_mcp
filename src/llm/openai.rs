@@ -19,7 +19,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Client for communicating with an OpenAI-compatible inference server (e.g. `llama-server`, `vLLM`).
+/// Client for communicating with an OpenAI API server.
 ///
 /// Uses the standard OpenAI-compatible `/v1/chat/completions` endpoint for tool/function calling.
 /// The model loaded into the server must have tool-calling templates aligned with the OpenAI
@@ -118,7 +118,7 @@ impl OpenAiClient {
     /// Creates a new `OpenAiClient`.
     ///
     /// # Arguments
-    /// * `provider_name` - The logical name of the backend (e.g. `llama.cpp`, `vllm`).
+    /// * `provider_name` - The logical name of the backend (`openai`).
     /// * `endpoint` - The base URL of the inference server (e.g., `http://localhost:8080`).
     /// * `model` - The model ID or name to include in chat requests.
     pub fn new(provider_name: &str, endpoint: &str, model: &str) -> Self {
@@ -141,7 +141,7 @@ impl OpenAiClient {
         match resp {
             Ok(r) if r.status().is_success() => Ok(()),
             _ => {
-                // Try /v1/models as a fallback (RamaLama/vLLM)
+                // Try /v1/models when the configured endpoint omits /v1.
                 let models_url = format!("{}/v1/models", self.endpoint);
                 let resp = self
                     .http_client
@@ -374,14 +374,14 @@ mod tests {
     /// Verifies the OpenAiClient is constructed correctly and trims trailing slashes.
     #[test]
     fn test_client_construction() {
-        let client = OpenAiClient::new("vllm", "http://localhost:8080/", "my-model");
+        let client = OpenAiClient::new("openai", "http://localhost:8080/", "my-model");
         assert_eq!(client.endpoint(), "http://localhost:8080");
         assert_eq!(client.model(), "my-model");
     }
 
     #[test]
     fn test_client_construction_normalizes_v1_suffix() {
-        let client = OpenAiClient::new("vllm", "http://localhost:8100/v1", "my-model");
+        let client = OpenAiClient::new("openai", "http://localhost:8100/v1", "my-model");
         assert_eq!(client.endpoint(), "http://localhost:8100");
         assert_eq!(client.model(), "my-model");
     }

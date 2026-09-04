@@ -37,7 +37,7 @@ Never use emojis, icons, or unicode symbols. Use plain text headings and labels 
 /// available tool definitions, executes any tool calls the LLM requests via the
 /// MCP client, feeds results back, and returns the final text response.
 pub struct Agent<'a, L: LlmClient> {
-    /// The LLM client (e.g., Ollama).
+    /// The OpenAI API client.
     llm: &'a L,
     /// The MCP client peer for invoking tools.
     mcp_peer: &'a Peer<RoleClient>,
