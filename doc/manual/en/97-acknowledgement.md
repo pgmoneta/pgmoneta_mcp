@@ -22,6 +22,7 @@ Sarthak Aneja <sarthakaneja260@gmail.com>
 Sahitya Chandra <sahityajb@gmail.com>
 Omar Ahmed <omar.ahmed75566@gmail.com>
 Mohamed Elsyed <2305273@anu.edu.eg>
+Mohamed Kamal <raynowing007@gmail.com>
 ```
 
 ## Committers

@@ -35,6 +35,7 @@ pub mod handler;
 pub mod llm;
 
 mod client;
+pub mod config_input;
 pub mod logging;
 pub mod mcp_client;
 pub mod security;

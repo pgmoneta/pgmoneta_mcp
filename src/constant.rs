@@ -138,6 +138,12 @@ impl Format {
     /// Standard JSON output format.
     pub const JSON: u8 = 1;
 
+    /// hint completion color
+    pub const COMPLETION: &str = "\x1b[38;2;120;120;120m";
+
+    /// hit completion color reset to normal
+    pub const ANSI_RESET: &str = "\x1b[0m";
+
     /// Translates a numeric format code into its string representation.
     ///
     /// # Arguments
