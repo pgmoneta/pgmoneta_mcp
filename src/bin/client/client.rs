@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+mod init;
 mod markdown;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
@@ -180,6 +181,10 @@ struct Args {
         default_value = "/etc/pgmoneta-mcp/pgmoneta-mcp-users.conf"
     )]
     users: String,
+
+    /// Interactively create ~/.pgmoneta-mcp/pgmoneta-mcp-client.conf and exit.
+    #[arg(short = 'i', long)]
+    init: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -358,6 +363,9 @@ impl Helper for ClientHelper {}
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    if args.init {
+        return init::run_init();
+    }
     let should_clear_terminal = io::stdout().is_terminal();
     let mut stdout = io::stdout();
     clear_startup_terminal(&mut stdout, should_clear_terminal)

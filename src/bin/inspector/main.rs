@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+mod init;
 pub mod interactive;
-
 use anyhow::{Result, anyhow, bail};
 use clap::{Args, Parser, Subcommand};
 use interactive::run_interactive_router;
@@ -34,6 +34,10 @@ use treelog::{Tree, config::RenderConfig, renderer::write_tree_with_config};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<McpCli>,
+
+    #[arg(short = 'i', long)]
+    /// Interactively create ~/.pgmoneta-mcp/pgmoneta-mcp-inspector.conf and exit.
+    init: bool,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -116,6 +120,10 @@ pub enum OutputFormat {
 async fn main() -> Result<()> {
     let args = Cli::parse();
 
+    if args.init {
+        return init::run_init();
+    }
+
     let cmd = args.command.unwrap_or(McpCli::Interactive);
 
     match cmd {
@@ -124,7 +132,6 @@ async fn main() -> Result<()> {
         }
         McpCli::Inspector { conf, action } => {
             let app = AppInspector::connect(&conf).await?;
-
             match action {
                 InspectorCommands::Tool {
                     action: tool_action,

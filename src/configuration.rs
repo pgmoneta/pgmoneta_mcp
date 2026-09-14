@@ -14,7 +14,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use super::constant::{LogLevel, LogType};
-use anyhow::anyhow;
+use anyhow::{Context, Result, anyhow};
 use config::{Config, FileFormat};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -282,35 +282,35 @@ pub fn load_client_configuration(client_path: &str) -> anyhow::Result<ClientAppC
     })
 }
 
-fn default_port() -> i32 {
+pub fn default_port() -> i32 {
     8000
 }
 
-fn default_log_path() -> String {
+pub fn default_log_path() -> String {
     "pgmoneta_mcp.log".to_string()
 }
 
-fn default_log_level() -> String {
+pub fn default_log_level() -> String {
     LogLevel::INFO.to_string()
 }
 
-fn default_log_type() -> String {
+pub fn default_log_type() -> String {
     LogType::CONSOLE.to_string()
 }
 
-fn default_log_line_prefix() -> String {
+pub fn default_log_line_prefix() -> String {
     "%Y-%m-%d %H:%M:%S".to_string()
 }
 
-fn default_log_mode() -> String {
+pub fn default_log_mode() -> String {
     "append".to_string()
 }
 
-fn default_log_rotation_age() -> String {
+pub fn default_log_rotation_age() -> String {
     "0".to_string()
 }
 
-fn default_llm_max_tool_rounds() -> usize {
+pub fn default_llm_max_tool_rounds() -> usize {
     10
 }
 
@@ -422,20 +422,36 @@ fn validate_llm_provider(provider: &str) -> anyhow::Result<()> {
     }
 }
 
-fn default_compression() -> String {
+pub fn default_compression() -> String {
     "zstd".to_string()
 }
 
-fn default_encryption() -> String {
+pub fn default_encryption() -> String {
     "aes_256_gcm".to_string()
 }
 
-fn default_metrics_port() -> i32 {
+pub fn default_metrics_port() -> i32 {
     5001
 }
 
-fn default_timeout() -> u64 {
+pub fn default_timeout() -> u64 {
     30
+}
+
+pub fn write_config_file(content: &str, file_name: &str) -> Result<String> {
+    let dir = home::home_dir()
+        .context("failed to resolve home directory")?
+        .join(".pgmoneta-mcp");
+
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("failed to create directory {}", dir.display()))?;
+
+    let path = dir.join(file_name);
+
+    std::fs::write(&path, content)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+
+    Ok(format!("\nWrote {}", path.display()))
 }
 
 #[cfg(test)]

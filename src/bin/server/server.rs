@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+mod init;
+
 use clap::Parser;
 use pgmoneta_mcp::configuration;
 use pgmoneta_mcp::handler::PgmonetaHandler;
@@ -52,11 +54,19 @@ struct Args {
         default_value = "/etc/pgmoneta-mcp/pgmoneta-mcp-users.conf"
     )]
     users: String,
+    /// Interactively create ~/.pgmoneta-mcp/pgmoneta-mcp.conf and exit.
+    #[arg(short = 'i', long)]
+    init: bool,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+
+    if args.init {
+        return init::run_init();
+    }
+
     let mut stdout = io::stdout();
     let is_terminal = stdout.is_terminal();
     let _ = Utility::write_terminal_title(
