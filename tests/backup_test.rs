@@ -30,6 +30,7 @@ async fn backup_server_test() {
         username: "backup_user".to_string(),
         server: "primary".to_string(),
         backup_id: None,
+        asynchronous: None,
     };
 
     let response = BackupServerTool::invoke(&handler, request)
@@ -68,6 +69,7 @@ async fn incremental_backup_test() {
         username: "backup_user".to_string(),
         server: "primary".to_string(),
         backup_id: None,
+        asynchronous: None,
     };
 
     // create initial full backup at first
@@ -80,6 +82,7 @@ async fn incremental_backup_test() {
         username: "backup_user".to_string(),
         server: "primary".to_string(),
         backup_id: Some("oldest".to_string()),
+        asynchronous: None,
     };
 
     let incremental_response = BackupServerTool::invoke(&handler, incremental_request)

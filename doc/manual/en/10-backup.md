@@ -6,6 +6,9 @@
 
 Take a backup of a pgmoneta server.
 
+To start the backup in the background, use the `backup` tool with `async` set
+to `true`. The response contains a job identifier that can be passed to `job`.
+
 **Example**
 
 ```text

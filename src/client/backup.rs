@@ -30,11 +30,13 @@ impl PgmonetaClient {
         username: &str,
         server: &str,
         incremental: Option<&str>,
+        asynchronous: bool,
     ) -> anyhow::Result<String> {
         let backup_request = BackupRequest {
             server: server.to_string(),
             backup: incremental.map(|s| s.to_string()),
         };
-        Self::forward_request(username, Command::BACKUP, backup_request).await
+        Self::forward_request_with_async(username, Command::BACKUP, backup_request, asynchronous)
+            .await
     }
 }

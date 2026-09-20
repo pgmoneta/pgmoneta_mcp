@@ -2,6 +2,10 @@
 
 # Archive
 
+Archive can run in the background by setting the `archive` tool's `async`
+argument to `true`. Use the returned job identifier with `job` to inspect the
+running operation or its persisted result.
+
 **Natural language description**
 
 Archive a backup to a directory.

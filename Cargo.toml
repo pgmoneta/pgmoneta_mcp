@@ -25,7 +25,7 @@ path = "src/bin/inspector/main.rs"
 [dependencies]
 tokio = { version = "1.53.1", features = ["full"] }
 serde = { version = "1.0.229", features = ["derive"] }
-rmcp = { version = "3.3.0", features = [
+rmcp = { version = "3.4.0", features = [
     "server",
     "macros",
     "client",

@@ -26,6 +26,7 @@ async fn create_backup_for_delete_test(handler: &PgmonetaHandler) -> anyhow::Res
         username: "backup_user".to_string(),
         server: "primary".to_string(),
         backup_id: None,
+        asynchronous: None,
     };
 
     let response = BackupServerTool::invoke(handler, request)
@@ -73,6 +74,7 @@ async fn delete_backup_without_force_test() {
         server: "primary".to_string(),
         backup_id: "newest".to_string(),
         force: Some(false),
+        asynchronous: None,
     };
 
     let delete_response =
@@ -111,6 +113,7 @@ async fn delete_backup_with_force_test() {
         server: "primary".to_string(),
         backup_id: "newest".to_string(),
         force: Some(true),
+        asynchronous: None,
     };
 
     let delete_response =

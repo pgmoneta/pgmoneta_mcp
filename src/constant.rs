@@ -16,7 +16,7 @@
 use anyhow::anyhow;
 
 /// This client version is to match pgmoneta-cli
-pub const CLIENT_VERSION: &str = "0.21.0";
+pub const CLIENT_VERSION: &str = "0.22.0";
 
 /// JSON key used to extract the outcome category from management responses.
 pub const MANAGEMENT_CATEGORY_OUTCOME: &str = "Outcome";
@@ -27,6 +27,8 @@ pub const MASTER_KEY_PATH: &str = ".pgmoneta-mcp/master.key";
 
 /// Represents management commands sent to the pgmoneta server.
 pub struct Command;
+/// Represents actions supported by the job management command.
+pub struct JobAction;
 /// Represents output format types (e.g., JSON).
 pub struct Format;
 /// Represents compression algorithms supported by pgmoneta.
@@ -94,6 +96,8 @@ impl Command {
     pub const CONF_SET: u32 = 23;
     /// Command to switch server online/offline mode.
     pub const MODE: u32 = 24;
+    /// Command to query, list, and remove async jobs.
+    pub const JOB: u32 = 26;
 
     /// Translates a numeric management command code into its string representation.
     ///
@@ -128,9 +132,18 @@ impl Command {
             Self::CONF_GET => Ok("conf get"),
             Self::CONF_SET => Ok("conf set"),
             Self::MODE => Ok("mode"),
+            Self::JOB => Ok("job"),
             default => Err(anyhow!("Unrecognized command enum: {default}")),
         }
     }
+}
+
+impl JobAction {
+    pub const UNKNOWN: u32 = 300;
+    pub const GET: u32 = 301;
+    pub const STATUS: u32 = 302;
+    pub const LIST: u32 = 303;
+    pub const REMOVE: u32 = 304;
 }
 impl Format {
     /// Standard TEXT output format.
@@ -404,6 +417,18 @@ impl ManagementError {
     pub const MANAGEMENT_ERROR_MODE_ERROR: u32 = 2804;
     pub const MANAGEMENT_ERROR_MODE_UNKNOWN_ACTION: u32 = 2805;
 
+    pub const MANAGEMENT_ERROR_JOB_NOSERVER: u32 = 3200;
+    pub const MANAGEMENT_ERROR_JOB_NOT_FOUND: u32 = 3201;
+    pub const MANAGEMENT_ERROR_JOB_ACTIVE: u32 = 3202;
+    pub const MANAGEMENT_ERROR_JOB_NETWORK: u32 = 3203;
+    pub const MANAGEMENT_ERROR_JOB_NOFORK: u32 = 3204;
+    pub const MANAGEMENT_ERROR_JOB_REMOVE_ACTIVE: u32 = 3205;
+    pub const MANAGEMENT_ERROR_JOB_DEQUE_CREATE: u32 = 3206;
+    pub const MANAGEMENT_ERROR_JOB_LIST_STATUS_INVALID: u32 = 3207;
+    pub const MANAGEMENT_ERROR_JOB_ERROR: u32 = 3208;
+    pub const MANAGEMENT_ERROR_JOB_ACTION_INVALID: u32 = 3209;
+    pub const MANAGEMENT_ERROR_JOB_REQUEST_INVALID: u32 = 3210;
+
     /// Translates a numeric management error code into a human-readable string.
     ///
     /// # Arguments
@@ -605,6 +630,18 @@ impl ManagementError {
             Self::MANAGEMENT_ERROR_MODE_NETWORK => "Mode: network error",
             Self::MANAGEMENT_ERROR_MODE_ERROR => "Mode: error",
             Self::MANAGEMENT_ERROR_MODE_UNKNOWN_ACTION => "Mode: unknown action",
+
+            Self::MANAGEMENT_ERROR_JOB_NOSERVER => "Job: server not found",
+            Self::MANAGEMENT_ERROR_JOB_NOT_FOUND => "Job: job not found",
+            Self::MANAGEMENT_ERROR_JOB_ACTIVE => "Job: job is active",
+            Self::MANAGEMENT_ERROR_JOB_NETWORK => "Job: network error",
+            Self::MANAGEMENT_ERROR_JOB_NOFORK => "Job: no fork",
+            Self::MANAGEMENT_ERROR_JOB_REMOVE_ACTIVE => "Job: cannot remove an active job",
+            Self::MANAGEMENT_ERROR_JOB_DEQUE_CREATE => "Job: internal deque creation failed",
+            Self::MANAGEMENT_ERROR_JOB_LIST_STATUS_INVALID => "Job: invalid list status",
+            Self::MANAGEMENT_ERROR_JOB_ERROR => "Job: error",
+            Self::MANAGEMENT_ERROR_JOB_ACTION_INVALID => "Job: invalid action",
+            Self::MANAGEMENT_ERROR_JOB_REQUEST_INVALID => "Job: invalid request",
 
             _ => "Unknown error",
         }

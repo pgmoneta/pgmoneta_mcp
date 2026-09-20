@@ -2,6 +2,10 @@
 
 # Restore
 
+Restore can run in the background by setting the `restore` tool's `async`
+argument to `true`. Use the returned job identifier with `job` to inspect the
+running operation or its persisted result.
+
 **Natural language description**
 
 Restore a backup into a target directory.

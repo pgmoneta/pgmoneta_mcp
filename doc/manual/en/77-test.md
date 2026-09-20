@@ -67,6 +67,9 @@ cargo test -- --nocapture
 - `test_build_request_header_different_commands`: Command differentiation
 - `test_request_serialization`: JSON serialization
 - `test_request_header_serialization`: Header serialization
+- `test_async_header_serialization`: Async header inclusion and synchronous omission
+- `client::job::tests`: Numeric job actions and payload selector serialization
+- `handler::job::tests`: Job MCP tool registration
 - `test_write_request_format`: Wire format validation
 - `test_timestamp_format`: Timestamp format validation
 - `test_request_clone`: Request cloning

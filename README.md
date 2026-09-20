@@ -17,6 +17,10 @@ User management is done with the administration tool called `pgmoneta-mcp-admin`
 Interactive tool execution is available through `pgmoneta-mcp-client`, while
 `pgmoneta-mcp-inspector` provides a more structured inspection CLI.
 
+Backup, restore, archive, and delete operations can run in async mode. The MCP
+server exposes job tools for looking up, listing, and removing their persisted
+job records. See [Async operations and jobs](doc/manual/en/36-async-jobs.md).
+
 ## OpenAI API support
 
 The native **pgmoneta MCP** client communicates with language models through the

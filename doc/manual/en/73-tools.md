@@ -14,6 +14,7 @@ Create a full or incremental backup.
 
 - `server`: The pgmoneta server name.
 - Optional `backup`: Base backup label for incremental backup.
+- Optional `async`: When `true`, return a job identifier and run the backup in the background.
 
 **Behavior**
 
@@ -79,6 +80,7 @@ Restore a backup into a directory. Position defaults to `current` when omitted.
 - `backup_id`: Backup label or one of `newest`, `latest`, `oldest`.
 - `directory`: Target restore directory.
 - Optional position controls: `current`, `name`, `xid`, `time`, `lsn`, `inclusive`, `timeline`, `action`, `primary`, `replica`.
+- Optional `async`: When `true`, return a job identifier and run the restore in the background.
 
 **Behavior**
 
@@ -418,6 +420,7 @@ Delete a backup. `force` defaults to `false`.
 - `server`: The pgmoneta server name.
 - `backup_id`: Backup label or one of `newest`, `latest`, `oldest`.
 - Optional `force`: Force deletion, default `false`.
+- Optional `async`: When `true`, return a job identifier and run the deletion in the background.
 
 **Behavior**
 
@@ -661,6 +664,7 @@ Archive a backup to a directory. Position defaults to `current` when not provide
 - `backup_id`: Backup label or one of `newest`, `latest`, `oldest`.
 - `directory`: Target archive directory.
 - Optional position controls: `current`, `name`, `xid`, `time`, `lsn`, `inclusive`, `timeline`, `action`, `primary`, `replica`.
+- Optional `async`: When `true`, return a job identifier and run the archive in the background.
 
 **Behavior**
 
@@ -1618,3 +1622,49 @@ clear {}
 }
 ```
 
+**Async Jobs**
+
+The `backup`, `restore`, `archive`, and `delete` tools accept `"async": true`.
+An async request returns immediately with a job identifier. The following
+tools inspect and remove the resulting job records.
+
+**Tool: /job**
+
+Get an active or persisted job by identifier.
+
+```text
+job {"job_id":"s0-backup-20260920123000"}
+```
+
+**Tool: /job_status**
+
+Get the currently running job for a server and operation. If none is running,
+get the latest persisted matching job. `command` is one of `backup`, `restore`,
+`archive`, or `delete`.
+
+```text
+job_status {"server":"primary","command":"backup"}
+```
+
+**Tools: /job_list_all, /job_list_server, /job_list_status**
+
+List all jobs, jobs for one server, or jobs in a particular terminal/running
+state. The supported states are `Running`, `Completed`, and `Failed`.
+
+```text
+job_list_all {}
+job_list_server {"server":"primary"}
+job_list_status {"state":"Running"}
+job_list_status {"state":"Completed"}
+job_list_status {"state":"Failed"}
+```
+
+**Tool: /job_remove**
+
+Remove one persisted job record. Omit `job_id` to remove all persisted records.
+An active job cannot be removed.
+
+```text
+job_remove {"job_id":"s0-backup-20260920123000"}
+job_remove {}
+```

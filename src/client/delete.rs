@@ -33,13 +33,14 @@ impl PgmonetaClient {
         server: &str,
         backup_id: &str,
         force: bool,
+        asynchronous: bool,
     ) -> anyhow::Result<String> {
         let request = DeleteRequest {
             server: server.to_string(),
             backup: backup_id.to_string(),
             force,
         };
-        Self::forward_request(username, Command::DELETE, request).await
+        Self::forward_request_with_async(username, Command::DELETE, request, asynchronous).await
     }
 }
 

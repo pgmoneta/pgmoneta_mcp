@@ -99,10 +99,19 @@ struct RequestHeader {
     timestamp: String,      // Request timestamp
     compression: u8,        // Compression type (NONE)
     encryption: u8,         // Encryption type (NONE)
+    asynchronous: Option<bool>, // Serialized as "Async": true for background operations
 }
 ```
 
 **Available MCP Tools**
+
+The `username` argument shown below is normally injected by
+`pgmoneta-mcp-client`. Direct MCP API callers must provide it.
+
+The `backup`, `restore`, `archive`, and `delete` tools also accept an optional
+`async` boolean. When it is `true`, pgmoneta returns a job identifier immediately
+and continues the operation in the background. When it is omitted or `false`,
+the operation remains synchronous.
 
 **say_hello**
 
@@ -127,6 +136,7 @@ struct RequestHeader {
 - `username` (string, required): pgmoneta admin username
 - `server` (string, required): Server name as configured in pgmoneta
 - `backup_id` (string, optional): Base backup identifier for incremental backup
+- `async` (boolean, optional): Run the backup in the background
 
 If `backup_id` is omitted, the tool creates a full backup.
 If `backup_id` is provided, the tool creates an incremental backup based on that backup.
@@ -156,6 +166,81 @@ Create an incremental backup:
     "backup_id": "latest"
   }
 }
+```
+
+Start an async full backup:
+
+```json
+{
+  "tool": "backup",
+  "arguments": {
+    "username": "admin",
+    "server": "primary",
+    "async": true
+  }
+}
+```
+
+**job**
+
+**Description**: Gets an active or persisted async job by identifier.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `job_id` (string, required): Identifier returned by an async operation
+
+**job_status**
+
+**Description**: Gets a matching running job, or the latest persisted matching
+job when none is running.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `server` (string, required): Server name as configured in pgmoneta
+- `command` (string, required): `backup`, `restore`, `archive`, or `delete`
+
+**job_list_all**
+
+**Description**: Lists all active and persisted jobs.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+
+**job_list_server**
+
+**Description**: Lists active and persisted jobs belonging to one server.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `server` (string, required): Server name as configured in pgmoneta
+
+**job_list_status**
+
+**Description**: Lists jobs in a requested state.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `state` (string, required): `Running`, `Completed`, or `Failed`
+
+**job_remove**
+
+**Description**: Removes one persisted job record, or all persisted records when
+`job_id` is omitted. An active job cannot be removed.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `job_id` (string, optional): Persisted job identifier to remove
+
+**Examples**:
+
+```text
+{"tool":"job","arguments":{"username":"admin","job_id":"s0-backup-20260920123000"}}
+{"tool":"job_status","arguments":{"username":"admin","server":"primary","command":"backup"}}
+{"tool":"job_list_all","arguments":{"username":"admin"}}
+{"tool":"job_list_server","arguments":{"username":"admin","server":"primary"}}
+{"tool":"job_list_status","arguments":{"username":"admin","state":"Completed"}}
+{"tool":"job_remove","arguments":{"username":"admin","job_id":"s0-backup-20260920123000"}}
+{"tool":"job_remove","arguments":{"username":"admin"}}
 ```
 
 **annotate_backup**
@@ -276,6 +361,7 @@ Remove a comment:
 - `server` (string, required): Server name as configured in pgmoneta
 - `backup_id` (string, required): Backup identifier (can be backup label, "newest", "latest", or "oldest")
 - `force` (boolean, optional): If true, forces deletion of the backup.
+- `async` (boolean, optional): Run the deletion in the background.
 
 **Returns**: Confirmation of deletion or error message.
 **Example**:
@@ -436,6 +522,7 @@ pgmoneta_retention_server{server="standby"} 14
 - `action` (string, optional): Action to perform on the primary server after restore (eg. `pause`, `shutdown`)
 - `primary` (boolean, optional) for cluster setup as primary.
 - `replica` (boolean, optional) for cluster setup as replica.
+- `async` (boolean, optional): Run the restore in the background.
 
 **Example**:
 ```json
@@ -471,6 +558,7 @@ pgmoneta_retention_server{server="standby"} 14
 - `action` (string, optional): Action to perform on the primary server after archive (eg. `pause`, `shutdown`)
 - `primary` (boolean, optional) for cluster setup as primary.
 - `replica` (boolean, optional) for cluster setup as replica.
+- `async` (boolean, optional): Run the archive in the background.
 
 **Example**:
 ```json

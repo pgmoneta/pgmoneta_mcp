@@ -36,6 +36,7 @@ impl PgmonetaClient {
         backup: &str,
         position: &str,
         directory: &str,
+        asynchronous: bool,
     ) -> anyhow::Result<String> {
         let archive_request = ArchiveRequest {
             server: server.to_string(),
@@ -44,6 +45,7 @@ impl PgmonetaClient {
             directory: directory.to_string(),
         };
 
-        Self::forward_request(username, Command::ARCHIVE, archive_request).await
+        Self::forward_request_with_async(username, Command::ARCHIVE, archive_request, asynchronous)
+            .await
     }
 }

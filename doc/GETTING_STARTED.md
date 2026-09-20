@@ -99,6 +99,13 @@ discover available tool.
 Open a chat (shortcut: Ctrl + Alt + I). Try asking your model to ask the server to say hello, or query
 your latest backup info!
 
+Long-running backup, restore, archive, and delete operations can be started with
+the MCP tool's `async` argument set to `true`. The returned job identifier can be
+passed to the `job` tool. You can also use `job_status`, `job_list_all`,
+`job_list_server`, `job_list_status`, and `job_remove`. See the
+[async operations and jobs](manual/en/36-async-jobs.md) chapter for the
+exact arguments and examples.
+
 ## Use a local LLM
 
 The native client communicates through the OpenAI API. The documented local

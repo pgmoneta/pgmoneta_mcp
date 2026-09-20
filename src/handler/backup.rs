@@ -28,6 +28,10 @@ pub struct BackupRequest {
     pub username: String,
     pub server: String,
     pub backup_id: Option<String>,
+    /// Return immediately with a job identifier and run the backup in the background.
+    #[serde(rename = "async")]
+    #[schemars(rename = "async")]
+    pub asynchronous: Option<bool>,
 }
 
 /// Tool for creating a full or incremental backup of a server.
@@ -48,6 +52,7 @@ impl ToolBase for BackupServerTool {
             Requires a server name. \
             If the backup identifier is not provided, a full backup will be created. \
             If the backup identifier is provided, an incremental backup will be created. \
+            Set async to true to return immediately with a job identifier and run the backup in the background. \
             The username has to be one of the pgmoneta admins to be able to access pgmoneta."
                 .into(),
         )
@@ -64,20 +69,30 @@ impl AsyncTool<PgmonetaHandler> for BackupServerTool {
         request: BackupRequest,
     ) -> Result<String, McpError> {
         let result = if let Some(backup_id) = &request.backup_id {
-            PgmonetaClient::request_backup(&request.username, &request.server, Some(backup_id))
-                .await
-                .map_err(|e| {
-                    McpError::internal_error(
-                        format!("Failed to create incremental backup: {:?}", e),
-                        None,
-                    )
-                })?
+            PgmonetaClient::request_backup(
+                &request.username,
+                &request.server,
+                Some(backup_id),
+                request.asynchronous.unwrap_or(false),
+            )
+            .await
+            .map_err(|e| {
+                McpError::internal_error(
+                    format!("Failed to create incremental backup: {:?}", e),
+                    None,
+                )
+            })?
         } else {
-            PgmonetaClient::request_backup(&request.username, &request.server, None)
-                .await
-                .map_err(|e| {
-                    McpError::internal_error(format!("Failed to create full backup: {:?}", e), None)
-                })?
+            PgmonetaClient::request_backup(
+                &request.username,
+                &request.server,
+                None,
+                request.asynchronous.unwrap_or(false),
+            )
+            .await
+            .map_err(|e| {
+                McpError::internal_error(format!("Failed to create full backup: {:?}", e), None)
+            })?
         };
         PgmonetaHandler::generate_call_tool_result_string(&result)
     }
@@ -96,6 +111,11 @@ mod tests {
         let desc = BackupServerTool::description();
         assert!(desc.is_some());
         assert!(desc.unwrap().contains("backup"));
+
+        let schema = BackupServerTool::input_schema().unwrap();
+        let properties = schema["properties"].as_object().unwrap();
+        assert!(properties.contains_key("async"));
+        assert!(!properties.contains_key("asynchronous"));
     }
 
     #[test]

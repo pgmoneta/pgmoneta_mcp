@@ -29,6 +29,10 @@ pub struct DeleteRequest {
     pub server: String,
     pub backup_id: String,
     pub force: Option<bool>,
+    /// Return immediately with a job identifier and run the deletion in the background.
+    #[serde(rename = "async")]
+    #[schemars(rename = "async")]
+    pub asynchronous: Option<bool>,
 }
 
 /// Tool for deleting a backup.
@@ -48,6 +52,7 @@ impl ToolBase for DeleteTool {
             "Delete a backup from the pgmoneta server. \
             Requires the server name, backup identifier, and an optional force flag. \
             \"newest\", \"latest\" or \"oldest\" are also accepted as backup identifier. \
+            Set async to true to return immediately with a job identifier and run the deletion in the background. \
             The username has to be one of the pgmoneta admins to be able to access pgmoneta."
                 .into(),
         )
@@ -75,6 +80,7 @@ impl AsyncTool<PgmonetaHandler> for DeleteTool {
             &request.server,
             &request.backup_id,
             force,
+            request.asynchronous.unwrap_or(false),
         )
         .await
         .map_err(|e| McpError::internal_error(format!("Failed to delete backup: {:?}", e), None))?;

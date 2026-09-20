@@ -22,6 +22,7 @@ mod conf;
 mod delete;
 mod encryption;
 mod info;
+mod job;
 mod metrics;
 mod mode;
 mod ping;
@@ -79,6 +80,8 @@ struct RequestHeader {
     compression: u8,
     #[serde(rename = "Encryption")]
     encryption: u8,
+    #[serde(rename = "Async", skip_serializing_if = "Option::is_none")]
+    asynchronous: Option<bool>,
 }
 
 /// A wrapper structure that combines a request header with its specific payload.
@@ -165,7 +168,15 @@ impl PgmonetaClient {
     ///
     /// The header includes the current local timestamp and always uses
     /// ZSTD compression plus AES-256-GCM encryption, expecting a JSON response.
+    #[cfg(test)]
     fn build_request_header(command: u32) -> anyhow::Result<RequestHeader> {
+        Self::build_request_header_with_async(command, false)
+    }
+
+    fn build_request_header_with_async(
+        command: u32,
+        asynchronous: bool,
+    ) -> anyhow::Result<RequestHeader> {
         let timestamp = Local::now().format("%Y%m%d%H%M%S").to_string();
 
         Ok(RequestHeader {
@@ -175,6 +186,7 @@ impl PgmonetaClient {
             timestamp,
             compression: Compression::ZSTD,
             encryption: Encryption::AES_256_GCM,
+            asynchronous: asynchronous.then_some(true),
         })
     }
 
@@ -418,7 +430,19 @@ impl PgmonetaClient {
     where
         R: Serialize + Clone + Debug,
     {
-        let header = Self::build_request_header(command)?;
+        Self::forward_request_with_async(username, command, request, false).await
+    }
+
+    async fn forward_request_with_async<R>(
+        username: &str,
+        command: u32,
+        request: R,
+        asynchronous: bool,
+    ) -> anyhow::Result<String>
+    where
+        R: Serialize + Clone + Debug,
+    {
+        let header = Self::build_request_header_with_async(command, asynchronous)?;
         let compression = header.compression;
         let encryption = header.encryption;
         let request = PgmonetaRequest { request, header };
@@ -497,6 +521,20 @@ mod tests {
     }
 
     #[test]
+    fn test_async_header_serialization() {
+        let synchronous =
+            PgmonetaClient::build_request_header_with_async(Command::BACKUP, false).unwrap();
+        let asynchronous =
+            PgmonetaClient::build_request_header_with_async(Command::BACKUP, true).unwrap();
+
+        let synchronous = serde_json::to_value(synchronous).unwrap();
+        let asynchronous = serde_json::to_value(asynchronous).unwrap();
+
+        assert!(synchronous.get("Async").is_none());
+        assert_eq!(asynchronous["Async"], true);
+    }
+
+    #[test]
     fn test_request_serialization() {
         init_test_config();
         #[derive(Serialize, Clone, Debug)]
@@ -538,6 +576,7 @@ mod tests {
             timestamp: "20260304123045".to_string(),
             compression: Compression::ZSTD,
             encryption: Encryption::AES_256_GCM,
+            asynchronous: None,
         };
 
         let serialized = serde_json::to_string(&header).expect("Serialization should succeed");

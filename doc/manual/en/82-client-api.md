@@ -60,6 +60,7 @@ struct RequestHeader {
     timestamp: String,      // Request timestamp (YYYYMMDDHHmmss)
     compression: u8,        // Compression type (ZSTD by default)
     encryption: u8,         // Encryption type (AES-256-GCM by default)
+    asynchronous: Option<bool>, // Serialized as "Async": true when enabled
 }
 ```
 
@@ -68,6 +69,8 @@ struct RequestHeader {
 - **command**: Numeric command code from `Command` constants
   - `Command::INFO` (1): Get backup information
   - `Command::LIST_BACKUP` (2): List backups
+  - `Command::PROGRESS` (25): Inspect operation progress
+  - `Command::JOB` (26): Query and manage async jobs
   - See `src/constant.rs` for complete list
 
 - **client_version**: Version string (e.g., "0.3.0")
@@ -93,6 +96,10 @@ struct RequestHeader {
   - `Encryption::AES_256_GCM` (1): AES-256-GCM (default)
   - `Encryption::AES_192_GCM` (2): AES-192-GCM
   - `Encryption::AES_128_GCM` (3): AES-128-GCM
+
+- **async**: Background execution flag
+  - `Some(true)`: Serialized as `"Async": true`
+  - `None`: The `Async` field is omitted and the request remains synchronous
 
 **PgmonetaRequest**
 
@@ -120,7 +127,8 @@ where
     "Output": 1,
     "Timestamp": "20260304123045",
     "Compression": 2,
-    "Encryption": 1
+    "Encryption": 1,
+    "Async": true
   },
   "Request": {
     // Request-specific fields
@@ -129,6 +137,10 @@ where
 ```
 
 **Request Payloads**
+
+For `backup`, `restore`, `archive`, and `delete`, the public request method
+accepts an additional `asynchronous: bool`. A value of `true` uses the same
+payload as the synchronous operation and adds `"Async": true` to its header.
 
 **InfoRequest**
 
@@ -199,6 +211,32 @@ let request = ListBackupsRequest {
 ```
 
 **Core Methods**
+
+**Job request methods**
+
+The client exposes the following management-protocol helpers:
+
+```rust
+PgmonetaClient::request_job(username, job_id).await;
+PgmonetaClient::request_job_status(username, server, command).await;
+PgmonetaClient::request_job_list_all(username).await;
+PgmonetaClient::request_job_list_server(username, server).await;
+PgmonetaClient::request_job_list_status(username, state).await;
+PgmonetaClient::request_job_remove(username, Some(job_id)).await;
+PgmonetaClient::request_job_remove(username, None).await;
+```
+
+All requests use `Command::JOB` (26). Their management action codes are:
+
+| Action | Code | Payload selector |
+|---|---:|---|
+| Get | 301 | `JobId` |
+| Status | 302 | `Server` and `Command` |
+| List | 303 | exactly one of `All`, `Server`, or `JobState` |
+| Remove | 304 | exactly one of `JobId` or `All` |
+
+`request_job_remove(username, None)` sends `"All": true`. It removes persisted
+job records only; the server rejects removal of an active job.
 
 **build_request_header**
 

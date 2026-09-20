@@ -29,6 +29,10 @@ pub struct RestoreRequest {
     pub server: String,
     pub backup_id: String,
     pub directory: String,
+    /// Return immediately with a job identifier and run the restore in the background.
+    #[serde(rename = "async")]
+    #[schemars(rename = "async")]
+    pub asynchronous: Option<bool>,
 
     /// Restore to the first stable checkpoint
     pub current: Option<bool>,
@@ -82,6 +86,7 @@ impl ToolBase for RestoreTool {
             Position \"action\" means which action will be executed after the restore (pause, shutdown). \
             Choose the position that best fits. \
             The directory specifies where to restore the backup. \
+            Set async to true to return immediately with a job identifier and run the restore in the background. \
             The username has to be one of the pgmoneta admins to be able to access pgmoneta."
                 .into(),
         )
@@ -110,6 +115,7 @@ impl AsyncTool<PgmonetaHandler> for RestoreTool {
             &request.backup_id,
             &position,
             &request.directory,
+            request.asynchronous.unwrap_or(false),
         )
         .await
         .map_err(|e| {
@@ -208,6 +214,7 @@ mod tests {
             action: Some("pause".to_string()),
             primary: None,
             replica: None,
+            asynchronous: None,
         };
         let position = normalize_position(&req);
         assert_eq!(
@@ -224,6 +231,7 @@ mod tests {
             backup_id: "backup".to_string(),
             directory: "/tmp/restore".to_string(),
             current: None,
+            asynchronous: None,
             name: None,
             xid: None,
             time: None,
@@ -246,6 +254,7 @@ mod tests {
             backup_id: "backup".to_string(),
             directory: "/tmp/restore".to_string(),
             current: None,
+            asynchronous: None,
             name: None,
             xid: None,
             time: None,
