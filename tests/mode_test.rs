@@ -17,6 +17,7 @@ use pgmoneta_mcp::handler::PgmonetaHandler;
 use pgmoneta_mcp::handler::mode::{ModeRequest, SetModeTool};
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
+use serial_test::serial;
 
 mod common;
 
@@ -42,9 +43,10 @@ fn assert_command_and_status(response: &str, json: &Value, expected_command: &st
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn set_mode_online_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     let handler = PgmonetaHandler::new();
     let request = ModeRequest {
@@ -62,9 +64,10 @@ async fn set_mode_online_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn set_mode_offline_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     let handler = PgmonetaHandler::new();
     let request = ModeRequest {

@@ -13,16 +13,165 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Once, OnceLock};
+use testcontainers::{
+    ContainerAsync, GenericImage, ImageExt,
+    core::{ExecCommand, IntoContainerPort},
+    runners::AsyncRunner,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, MutexGuard};
-use tokio::time::{Duration, timeout};
+use tokio::time::{Duration, Instant, sleep, timeout};
 
 static INIT_CONFIG: Once = Once::new();
 static BACKUP_FIXTURE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 const MAX_FRAME_LEN: usize = 64 * 1024 * 1024;
 
-pub fn init_config() {
+#[derive(Serialize, Clone, Debug)]
+struct PingRequest;
+
+pub async fn init_config() -> ContainerAsync<GenericImage> {
+    let image_name = std::env::var("PGMONETA_MCP_TEST_IMAGE")
+        .unwrap_or_else(|_| "pgmoneta-mcp-test-suite".to_string());
+    let container = GenericImage::new(image_name.as_str(), "latest")
+        .with_exposed_port(5002.tcp())
+        .with_mapped_port(5002, 5002.tcp())
+        .with_env_var("PG_DATABASE", env_or_default("PG_DATABASE", "mydb"))
+        .with_env_var(
+            "PG_DATABASE_ENCODING",
+            env_or_default("PG_DATABASE_ENCODING", "UTF8"),
+        )
+        .with_env_var("PG_USER_NAME", env_or_default("PG_USER_NAME", "myuser"))
+        .with_env_var(
+            "PG_USER_PASSWORD",
+            env_or_default("PG_USER_PASSWORD", "mypass"),
+        )
+        .with_env_var("PG_NETWORK_MASK", env_or_default("PG_NETWORK_MASK", "all"))
+        .with_env_var(
+            "PG_PRIMARY_NAME",
+            env_or_default("PG_PRIMARY_NAME", "localhost"),
+        )
+        .with_env_var("PG_PRIMARY_PORT", env_or_default("PG_PRIMARY_PORT", "5432"))
+        .with_env_var(
+            "PG_REPL_USER_NAME",
+            env_or_default("PG_REPL_USER_NAME", "backup_user"),
+        )
+        .with_env_var(
+            "PG_REPL_USER_PASSWORD",
+            env_or_default("PG_REPL_USER_PASSWORD", "backup_pass"),
+        )
+        .start()
+        .await
+        .expect("test suite container should start");
+    let host = container
+        .get_host()
+        .await
+        .expect("container host should be available")
+        .to_string();
+    let port = container
+        .get_host_port_ipv4(5002)
+        .await
+        .expect("mapped pgmoneta port should be available");
+    init_config_for_pgmoneta(&host, i32::from(port));
+    wait_for_pgmoneta(&container).await;
+
+    container
+}
+
+fn env_or_default(name: &str, default: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| default.to_string())
+}
+
+pub async fn prepare_compress_fixture(container: &ContainerAsync<GenericImage>) {
+    prepare_file_fixture(
+        container,
+        "printf 'pgmoneta MCP compression fixture\\n' > /tmp/pgmoneta-mcp-compress-fixture.txt && chmod 644 /tmp/pgmoneta-mcp-compress-fixture.txt && chown pgmoneta:pgmoneta /tmp/pgmoneta-mcp-compress-fixture.txt",
+    )
+    .await;
+}
+
+pub async fn prepare_decompress_fixture(container: &ContainerAsync<GenericImage>) {
+    prepare_file_fixture(
+        container,
+        "printf 'pgmoneta MCP decompression fixture\\n' > /tmp/pgmoneta-mcp-decompress-fixture.txt && zstd -q -f /tmp/pgmoneta-mcp-decompress-fixture.txt -o /tmp/pgmoneta-mcp-decompress-fixture.txt.zstd && rm -f /tmp/pgmoneta-mcp-decompress-fixture.txt && chmod 644 /tmp/pgmoneta-mcp-decompress-fixture.txt.zstd && chown pgmoneta:pgmoneta /tmp/pgmoneta-mcp-decompress-fixture.txt.zstd",
+    )
+    .await;
+}
+
+pub async fn prepare_encrypt_fixture(container: &ContainerAsync<GenericImage>) {
+    prepare_file_fixture(
+        container,
+        "printf 'pgmoneta MCP encryption fixture\\n' > /tmp/pgmoneta-mcp-encrypt-fixture.txt && chmod 644 /tmp/pgmoneta-mcp-encrypt-fixture.txt && chown pgmoneta:pgmoneta /tmp/pgmoneta-mcp-encrypt-fixture.txt",
+    )
+    .await;
+}
+
+pub async fn prepare_decrypt_fixture(container: &ContainerAsync<GenericImage>) {
+    prepare_file_fixture(
+        container,
+        "printf 'pgmoneta MCP decryption fixture\\n' > /tmp/pgmoneta-mcp-decrypt-fixture.txt && chmod 644 /tmp/pgmoneta-mcp-decrypt-fixture.txt && chown pgmoneta:pgmoneta /tmp/pgmoneta-mcp-decrypt-fixture.txt",
+    )
+    .await;
+}
+
+async fn prepare_file_fixture(container: &ContainerAsync<GenericImage>, script: &str) {
+    let command = ExecCommand::new(["/bin/bash", "-lc", script]);
+    let mut result = container
+        .exec(command)
+        .await
+        .expect("test fixtures should be created in the container");
+    result
+        .stdout_to_vec()
+        .await
+        .expect("fixture command should finish");
+    assert_eq!(
+        result
+            .exit_code()
+            .await
+            .expect("fixture command exit status should be available"),
+        Some(0),
+        "test fixtures should be created successfully"
+    );
+}
+
+async fn wait_for_pgmoneta(container: &ContainerAsync<GenericImage>) {
+    let deadline = Instant::now() + Duration::from_secs(90);
+
+    loop {
+        let last_error = match timeout(
+            Duration::from_secs(5),
+            send_management_request("backup_user", Command::PING, PingRequest),
+        )
+        .await
+        {
+            Ok(Ok(response)) => match serde_json::from_str::<Value>(&response) {
+                Ok(json)
+                    if json["Outcome"]["Status"] == true || json["Outcome"]["Status"] == "OK" =>
+                {
+                    return;
+                }
+                Ok(json) => format!("pgmoneta ping returned an unsuccessful response: {json}"),
+                Err(error) => format!("pgmoneta ping returned invalid JSON: {error}"),
+            },
+            Ok(Err(error)) => error.to_string(),
+            Err(_) => "pgmoneta ping attempt timed out".to_string(),
+        };
+
+        if Instant::now() >= deadline {
+            let stdout = container.stdout_to_vec().await.unwrap_or_default();
+            let stderr = container.stderr_to_vec().await.unwrap_or_default();
+            panic!(
+                "pgmoneta did not become ready before the startup timeout; last ping error: {last_error}\ncontainer stdout:\n{}\ncontainer stderr:\n{}",
+                String::from_utf8_lossy(&stdout),
+                String::from_utf8_lossy(&stderr),
+            );
+        }
+        sleep(Duration::from_millis(500)).await;
+    }
+}
+
+pub fn init_config_for_pgmoneta(host: &str, port: i32) {
+    let host = host.to_string();
     INIT_CONFIG.call_once(|| {
         let force_plain = std::env::var("PGMONETA_MCP_FORCE_PLAIN")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -66,8 +215,8 @@ pub fn init_config() {
                 log_rotation_age: "0".to_string(),
             },
             pgmoneta: PgmonetaConfiguration {
-                host: "127.0.0.1".to_string(),
-                port: 5002,
+                host,
+                port,
                 metrics: 5001,
                 compression,
                 encryption,

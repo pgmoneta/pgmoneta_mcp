@@ -17,6 +17,7 @@ use pgmoneta_mcp::handler::PgmonetaHandler;
 use pgmoneta_mcp::handler::retention::{ExpungeBackupTool, RetainBackupTool, RetentionRequest};
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
+use serial_test::serial;
 
 mod common;
 
@@ -42,9 +43,10 @@ fn assert_command_and_status(response: &str, json: &Value, expected_command: &st
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn retain_backup_test() {
-    common::init_config();
+    let _container = common::init_config().await;
     let _guard = common::backup_fixture_lock().await;
     let backup_id = common::ensure_backup("primary")
         .await
@@ -67,9 +69,10 @@ async fn retain_backup_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn retain_with_cascade_backup_test() {
-    common::init_config();
+    let _container = common::init_config().await;
     let _guard = common::backup_fixture_lock().await;
     let backup_id = common::ensure_backup("primary")
         .await
@@ -103,9 +106,10 @@ async fn retain_with_cascade_backup_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn expunge_backup_test() {
-    common::init_config();
+    let _container = common::init_config().await;
     let _guard = common::backup_fixture_lock().await;
     let backup_id = common::ensure_backup("primary")
         .await

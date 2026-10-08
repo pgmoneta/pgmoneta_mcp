@@ -19,6 +19,7 @@ use pgmoneta_mcp::handler::encryption::{
 };
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
+use serial_test::serial;
 
 mod common;
 
@@ -27,9 +28,11 @@ const DECRYPT_FIXTURE_SOURCE: &str = "/tmp/pgmoneta-mcp-decrypt-fixture.txt";
 const DECRYPT_FIXTURE_ARCHIVE: &str = "/tmp/pgmoneta-mcp-decrypt-fixture.txt.aes";
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn encrypt_file_test() {
-    common::init_config();
+    let _container = common::init_config().await;
+    common::prepare_encrypt_fixture(&_container).await;
 
     let handler = PgmonetaHandler::new();
     let request = EncryptRequest {
@@ -65,9 +68,11 @@ async fn encrypt_file_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn decrypt_file_test() {
-    common::init_config();
+    let _container = common::init_config().await;
+    common::prepare_decrypt_fixture(&_container).await;
 
     let handler = PgmonetaHandler::new();
     let encrypt_request = EncryptRequest {

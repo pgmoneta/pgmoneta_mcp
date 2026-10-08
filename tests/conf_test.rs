@@ -20,13 +20,15 @@ use pgmoneta_mcp::handler::conf::{
 };
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
+use serial_test::serial;
 
 mod common;
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn conf_reload_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     let handler = PgmonetaHandler::new();
     let request = ConfReloadRequest {
@@ -51,9 +53,10 @@ async fn conf_reload_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn conf_ls_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     let handler = PgmonetaHandler::new();
     let request = ConfLsRequest {
@@ -78,9 +81,10 @@ async fn conf_ls_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn conf_get_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     let handler = PgmonetaHandler::new();
     let request = ConfGetRequest {
@@ -105,9 +109,10 @@ async fn conf_get_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn conf_set_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     let handler = PgmonetaHandler::new();
     let request = ConfSetRequest {

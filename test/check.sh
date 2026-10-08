@@ -64,10 +64,10 @@ export PG_REPL_USER_PASSWORD=${PG_REPL_USER_PASSWORD:-"backup_pass"}
 ## Container operations
 ## ================================
 get_container_engine() {
-    if command -v podman >/dev/null 2>&1; then
-        echo "podman"
-    elif command -v docker >/dev/null 2>&1; then
+    if command -v docker >/dev/null 2>&1; then
         echo "docker"
+    elif command -v podman >/dev/null 2>&1; then
+        echo "podman"
     else
         echo "Error: Neither Docker nor Podman is installed" >&2
         exit 1
@@ -690,6 +690,35 @@ run_info_test_matrix() {
     done
 }
 
+run_testcontainers_suite() {
+    local cargo_filter=()
+
+    if [[ -n "$MODULE_FILTER" ]]; then
+        cargo_filter+=("$MODULE_FILTER")
+    fi
+
+    cargo test --all-features "${cargo_filter[@]}" -- \
+        --test-threads=1 --nocapture --include-ignored
+}
+
+run_testcontainers_targets() {
+    local cargo_filter=()
+
+    if [[ -n "$MODULE_FILTER" ]]; then
+        cargo_filter+=("$MODULE_FILTER")
+    fi
+
+    cargo test --all-features --tests "${cargo_filter[@]}" -- \
+        --test-threads=1 --nocapture --include-ignored
+}
+
+prepare_testcontainers() {
+    handle_master_key
+    build_test_suite
+    get_image_name
+    export PGMONETA_MCP_TEST_IMAGE="$IMAGE_REF"
+}
+
 ## ================================
 ## Main script logic
 ## ================================
@@ -697,11 +726,11 @@ usage() {
    echo "Usage: $0 [options] [sub-command]"
    echo "Subcommands:"
    echo " setup          Install Dependencies e.g (Rust, Cargo) required for building and running tests"
-   echo " build          Set up environment (build, postgreSQL and pgmoneta composed image) without running tests"
+    echo " build          Build the PostgreSQL and pgmoneta image without running tests"
    echo " clean          Clean up test suite environment and remove the composed image"
-    echo " test           Starts the composed container and runs the full test suite"
-   echo " integration    Starts the composed container and run only integration tests (clean + build + integration)"
-    echo " unit           Clean + build environment, then run only unit tests"
+    echo " test           Build the test image and run all tests"
+   echo " integration    Build the test image and run integration tests"
+    echo " unit           Run unit tests only (no service container required)"
     echo " unit-only      Alias for 'unit'"
     echo " ci             Run only the 20-mode info_test matrix with CI-specific settings"
    echo " status         Show test environment status (image, container, ports, master key)"
@@ -709,8 +738,8 @@ usage() {
    echo " -m, --module NAME   Run all tests in module NAME"
    echo "Examples:"
     echo "  $0                  Run full test suite"
-    echo "  $0 test             Run full test suite"
-   echo "  $0 build            Set up environment only; then run e.g. $0 test -m security"
+     echo "  $0 test             Run full test suite"
+    echo "  $0 build            Build the service image without running tests"
    echo "  $0 test -m security       Run all tests in module 'security'"
    echo "  $0 integration -m info_test    Run integration tests in module 'info_test'"
    exit 1
@@ -809,27 +838,12 @@ case "$SUBCOMMAND" in
         show_status
         ;;
     test)
-        handle_master_key
-        build_test_suite
-        start_composed_container
-        trap stop_composed_container EXIT
-        run_info_test_matrix
-        if [[ -n "$MODULE_FILTER" ]]; then
-            cargo test --all-features -- --test-threads=1 --nocapture --include-ignored -- $MODULE_FILTER
-        else
-            cargo test --all-features -- --test-threads=1 --nocapture --include-ignored
-        fi
+        prepare_testcontainers
+        run_testcontainers_suite
         ;;
     integration)
-        handle_master_key
-        build_test_suite
-        start_composed_container
-        trap stop_composed_container EXIT
-        if [[ -n "$MODULE_FILTER" ]]; then
-            cargo test --test "*" -- --test-threads=1 --nocapture --include-ignored -- $MODULE_FILTER
-        else
-            cargo test --test "*" -- --test-threads=1 --nocapture --include-ignored
-        fi
+        prepare_testcontainers
+        run_testcontainers_targets
         ;;
     unit)
         cleanup
@@ -849,16 +863,7 @@ case "$SUBCOMMAND" in
         echo "Skipping default cargo test suite in ci mode; unit tests are handled in dedicated CI jobs."
         ;;
     "")
-        cleanup
-        handle_master_key
-        build_test_suite
-        start_composed_container
-        trap stop_composed_container EXIT
-        run_info_test_matrix
-        if [[ -n "$MODULE_FILTER" ]]; then
-            cargo test -- --test-threads=1 --nocapture --include-ignored -- $MODULE_FILTER
-        else
-            cargo test -- --test-threads=1 --nocapture --include-ignored
-        fi
+        prepare_testcontainers
+        run_testcontainers_suite
         ;;
 esac

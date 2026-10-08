@@ -2,11 +2,13 @@ use pgmoneta_mcp::handler::PgmonetaHandler;
 use pgmoneta_mcp::handler::info::{ListBackupsRequest, ListBackupsTool};
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
+use serial_test::serial;
 mod common;
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn list_backup_test() {
-    common::init_config();
+    let _container = common::init_config().await;
     let _guard = common::backup_fixture_lock().await;
     common::ensure_backup("primary")
         .await

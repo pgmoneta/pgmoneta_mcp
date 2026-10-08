@@ -19,6 +19,7 @@ use pgmoneta_mcp::handler::compression::{
 };
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
+use serial_test::serial;
 
 mod common;
 
@@ -26,9 +27,11 @@ const COMPRESS_FIXTURE_PATH: &str = "/tmp/pgmoneta-mcp-compress-fixture.txt";
 const DECOMPRESS_FIXTURE_PATH: &str = "/tmp/pgmoneta-mcp-decompress-fixture.txt.zstd";
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn compress_file_test() {
-    common::init_config();
+    let _container = common::init_config().await;
+    common::prepare_compress_fixture(&_container).await;
 
     let handler = PgmonetaHandler::new();
     let request = CompressRequest {
@@ -64,9 +67,11 @@ async fn compress_file_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn decompress_file_test() {
-    common::init_config();
+    let _container = common::init_config().await;
+    common::prepare_decompress_fixture(&_container).await;
 
     let handler = PgmonetaHandler::new();
     let request = DecompressRequest {

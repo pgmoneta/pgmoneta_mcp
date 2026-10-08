@@ -17,6 +17,7 @@ use pgmoneta_mcp::handler::PgmonetaHandler;
 use pgmoneta_mcp::handler::backup::{BackupRequest, BackupServerTool};
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
+use serial_test::serial;
 
 mod common;
 
@@ -57,9 +58,10 @@ async fn create_backup_for_delete_test(handler: &PgmonetaHandler) -> anyhow::Res
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn delete_backup_without_force_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     // first create a backup to delete
     let handler = PgmonetaHandler::new();
@@ -96,9 +98,10 @@ async fn delete_backup_without_force_test() {
 }
 
 #[tokio::test]
+#[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn delete_backup_with_force_test() {
-    common::init_config();
+    let _container = common::init_config().await;
 
     let handler = PgmonetaHandler::new();
     create_backup_for_delete_test(&handler)

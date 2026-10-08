@@ -54,7 +54,7 @@ fn assert_success_restore_response(response: &str) -> Value {
 #[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn restore_with_current_primary_test() {
-    common::init_config();
+    let _container = common::init_config().await;
     let _guard = common::backup_fixture_lock().await;
     common::ensure_backup("primary")
         .await
@@ -98,7 +98,7 @@ async fn restore_with_current_primary_test() {
 #[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn restore_with_primary_action_timeline_test() {
-    common::init_config();
+    let _container = common::init_config().await;
     let _guard = common::backup_fixture_lock().await;
     common::ensure_backup("primary")
         .await
@@ -142,7 +142,7 @@ async fn restore_with_primary_action_timeline_test() {
 #[serial]
 #[ignore = "requires pgmoneta stack (see test/check.sh and full-test CI job)"]
 async fn restore_with_primary_replica_test() {
-    common::init_config();
+    let _container = common::init_config().await;
     let _guard = common::backup_fixture_lock().await;
     common::ensure_backup("primary")
         .await
