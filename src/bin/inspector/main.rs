@@ -215,7 +215,10 @@ impl AppInspector {
         println!();
         let value =
             serde_json::to_value(data).map_err(|e| anyhow!("Error serializing data: {:?}", e))?;
-        let value = Self::deep_decode(value);
+        let value = match format {
+            OutputFormat::Json => Self::deep_decode(value),
+            OutputFormat::Tree => Self::deep_decode_internal(value, true),
+        };
 
         match format {
             OutputFormat::Json => serde_json::to_string_pretty(&value)
@@ -259,12 +262,17 @@ impl AppInspector {
     }
 
     fn deep_decode(v: serde_json::Value) -> serde_json::Value {
+        Self::deep_decode_internal(v, false)
+    }
+
+    fn deep_decode_internal(v: serde_json::Value, truncate: bool) -> serde_json::Value {
         match v {
             serde_json::Value::String(mut s) => {
                 if let Ok(inner) = serde_json::from_str::<serde_json::Value>(&s) {
-                    Self::deep_decode(inner)
+                    Self::deep_decode_internal(inner, truncate)
                 } else {
-                    if s.len() > 100
+                    if truncate
+                        && s.len() > 100
                         && let Some((idx, _)) = s.char_indices().nth(100)
                     {
                         s.truncate(idx);
@@ -273,12 +281,14 @@ impl AppInspector {
                     serde_json::Value::String(s)
                 }
             }
-            serde_json::Value::Array(arr) => {
-                serde_json::Value::Array(arr.into_iter().map(Self::deep_decode).collect())
-            }
+            serde_json::Value::Array(arr) => serde_json::Value::Array(
+                arr.into_iter()
+                    .map(|item| Self::deep_decode_internal(item, truncate))
+                    .collect(),
+            ),
             serde_json::Value::Object(map) => serde_json::Value::Object(
                 map.into_iter()
-                    .map(|(k, v)| (k, Self::deep_decode(v)))
+                    .map(|(k, v)| (k, Self::deep_decode_internal(v, truncate)))
                     .collect(),
             ),
             other => other,
@@ -425,5 +435,62 @@ mod tests {
         let invalid_json = json!("{\"broken_key\": \"val\"");
         let decoded_invalid = AppInspector::deep_decode(invalid_json.clone());
         assert_eq!(decoded_invalid, invalid_json);
+    }
+
+    // Regression: deep_decode must NOT truncate plain strings > 100 chars.
+    #[test]
+    fn test_deep_decode_preserves_long_string_in_json_output() {
+        // 200-char plain ASCII, not valid JSON -> goes to truncation branch.
+        let long_string: String = "A".repeat(200);
+        assert_eq!(long_string.len(), 200);
+
+        let input = serde_json::Value::String(long_string.clone());
+        let decoded = AppInspector::deep_decode(input);
+
+        let got = decoded.as_str().expect("result should still be a string");
+        assert_eq!(
+            got,
+            long_string.as_str(),
+            "deep_decode truncated a {}-char string to {} chars; --output json will silently lose data",
+            long_string.len(),
+            got.len()
+        );
+    }
+
+    #[test]
+    fn test_format_response_tree_truncates_long_string() {
+        let long_string: String = "C".repeat(200);
+        let data = serde_json::json!({ "field": long_string });
+
+        let output = AppInspector::format_response(&data, &OutputFormat::Tree)
+            .expect("format_response should not fail");
+
+        assert!(
+            output.contains("..."),
+            "tree output should truncate long string with '...'; output was:\n{output}"
+        );
+        assert!(
+            !output.contains(&"C".repeat(200)),
+            "tree output should not contain the full 200-char string; output was:\n{output}"
+        );
+        assert!(
+            output.contains(&"C".repeat(100)),
+            "tree output should contain the first 100 characters; output was:\n{output}"
+        );
+    }
+
+    // --output json must not truncate long strings.
+    #[test]
+    fn test_format_response_json_preserves_long_string() {
+        let long_string: String = "B".repeat(200);
+        let data = serde_json::json!({ "field": long_string });
+
+        let output = AppInspector::format_response(&data, &OutputFormat::Json)
+            .expect("format_response should not fail");
+
+        assert!(
+            output.contains(&"B".repeat(200)),
+            "format_response (--output json) truncated the 200-char string; output was:\n{output}"
+        );
     }
 }
