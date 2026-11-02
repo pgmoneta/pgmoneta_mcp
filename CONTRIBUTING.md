@@ -45,8 +45,8 @@ To build the `main` branch:
 
 ```
 git clone https://github.com/pgmoneta/pgmoneta_mcp.git
-cd pgmoneta-mcp
-make build
+cd pgmoneta_mcp
+cargo build
 cd target/debug
 ./pgmoneta-mcp-server
 ```
