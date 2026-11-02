@@ -17,7 +17,6 @@ use anyhow::{Context, Result};
 use pgmoneta_mcp::{
     config_input::{
         prompt_bool, prompt_default, prompt_number, prompt_required, prompt_with_options,
-        prompt_with_options_required,
     },
     configuration::{
         default_llm_max_tool_rounds, default_log_level, default_log_line_prefix, default_log_mode,
@@ -50,12 +49,10 @@ pub fn run_init() -> Result<()> {
     let metrics = prompt_number("metrics", default_metrics_port())?;
 
     let llm = prompt_bool("configure llm section", false)?;
-    let mut provider = String::new();
     let mut endpoint = String::new();
     let mut model = String::new();
     let mut max_tool_calls = 0;
     if llm {
-        provider = prompt_with_options_required("provider: ", &["openai"])?;
         endpoint = prompt_required("endpoint: ")?;
         model = prompt_required("model: ")?;
         max_tool_calls = prompt_number("max tool calls", default_llm_max_tool_rounds())?;
@@ -103,7 +100,6 @@ pub fn run_init() -> Result<()> {
     let mut llm_section = vec![];
 
     if llm {
-        llm_section.push(format_key_value("provider", provider));
         llm_section.push(format_key_value("endpoint", endpoint));
         llm_section.push(format_key_value("model", model));
 

@@ -34,7 +34,6 @@ timeout = 30
 model = gemma
 
 [gemma]
-provider = openai
 endpoint = http://localhost:8100/v1
 model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
@@ -53,7 +52,6 @@ name is what you use with `/model`.
 
 | Key | Required | Description |
 | :-- | :-- | :-- |
-| `provider` | Yes | Must be `openai`. |
 | `endpoint` | Yes | OpenAI API URL, normally ending in `/v1`. |
 | `model` | Yes | Model name or ID used for tool selection. |
 | `max_tool_rounds` | No | Maximum tool-calling iterations per prompt. Defaults to `10`. |

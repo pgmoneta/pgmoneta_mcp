@@ -16,8 +16,7 @@
 use anyhow::{Context, Result};
 
 use pgmoneta_mcp::config_input::{
-    prompt_bool, prompt_default, prompt_number, prompt_required, prompt_with_options,
-    prompt_with_options_required,
+    prompt_bool, prompt_default, prompt_number, prompt_required, prompt_with_options_required,
 };
 
 use pgmoneta_mcp::configuration::{
@@ -26,7 +25,6 @@ use pgmoneta_mcp::configuration::{
 
 struct Profile {
     name: String,
-    provider: String,
     endpoint: String,
     model: String,
     max_tool_rounds: usize,
@@ -49,8 +47,6 @@ pub fn run_init() -> Result<()> {
 
         let name = prompt_required("Profile name: ")?;
 
-        let provider = prompt_with_options("provider", "openai", &["openai"])?;
-
         let endpoint = prompt_required("endpoint: ")?;
 
         let model = prompt_required("model: ")?;
@@ -59,7 +55,6 @@ pub fn run_init() -> Result<()> {
 
         profiles.push(Profile {
             name,
-            provider,
             endpoint,
             model,
             max_tool_rounds,
@@ -88,12 +83,8 @@ pub fn run_init() -> Result<()> {
 
     for profile in &profiles {
         content.push_str(&format!(
-            "\n[{}]\nprovider={}\nendpoint={}\nmodel={}\nmax_tool_rounds={}\n",
-            profile.name,
-            profile.provider,
-            profile.endpoint,
-            profile.model,
-            profile.max_tool_rounds,
+            "\n[{}]\nendpoint={}\nmodel={}\nmax_tool_rounds={}\n",
+            profile.name, profile.endpoint, profile.model, profile.max_tool_rounds,
         ));
     }
 

@@ -38,7 +38,6 @@ timeout = 30
 model = gemma
 
 [gemma]
-provider = openai
 endpoint = http://localhost:8100/v1
 model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10

@@ -400,7 +400,6 @@ timeout = 30
 model = gemma
 
 [gemma]
-provider = openai
 endpoint = http://localhost:8100/v1
 model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
@@ -423,7 +422,6 @@ The section name is the profile name exposed by `/model [name]` and Tab completi
 
 | Key | Required | Description |
 |------|----------|-------------|
-| `provider` | Yes | Must be `openai` |
 | `endpoint` | Yes | OpenAI API URL, normally ending in `/v1` |
 | `model` | Yes | Model identifier used for tool selection |
 | `max_tool_rounds` | No | Accepted for compatibility with the shared LLM config block. Default: `10` |
@@ -488,7 +486,7 @@ non-whitespace character is `#`, the line is treated as a comment, is still
 recorded in history, does not execute, and immediately shows a fresh prompt.
 
 `/list-models` prints the configured LLM profiles as an aligned table with the
-columns `Name`, `Model`, and `Provider`.
+columns `Name`, `Model`, and `Endpoint`.
 
 The client starts in `/user` mode. When at least one LLM profile is configured,
 free-form requests are translated into one of the tools from `/tools` using the

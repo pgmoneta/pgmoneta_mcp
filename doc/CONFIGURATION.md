@@ -35,7 +35,6 @@ See the manual or [LOCAL_LLM.md](../LOCAL_LLM.md) for detailed setup instruction
 
 | Property | Default | Unit | Required | Description |
 | :------- | :------ | :--- | :------- | :---------- |
-| provider | | String | Yes | Must be `openai` |
 | endpoint | | String | Yes | The OpenAI API URL, normally ending in `/v1` |
 | model | | String | Yes | The model name to use for inference |
 | max_tool_rounds | 10 | Int | No | Maximum tool-calling iterations per user prompt |

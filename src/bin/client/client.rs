@@ -113,7 +113,7 @@ Basic usage:
   /reload               Reconnect with the original client URL and model configuration
   /user                 User mode (default). Accept natural-language requests
   /developer            Developer mode. Accept <tool-name> {JSON} input and print full JSON responses
-  /list-models          List configured LLM profiles as name, model, and provider
+  /list-models          List configured LLM profiles as name, model, and endpoint
   /model [name]         Show or switch the active LLM profile for natural-language requests
   /tools                List available MCP tools
   /exit or /quit        Exit the client
@@ -282,13 +282,8 @@ impl InterruptState {
     }
 }
 
-enum ConfiguredLlm {
-    OpenAi(OpenAiClient),
-}
-
 struct LlmStatusProbe {
     model: String,
-    provider: String,
     endpoint: String,
 }
 
@@ -385,7 +380,6 @@ fn main() -> Result<()> {
                 name.clone(),
                 LlmStatusProbe {
                     model: configuration.model.clone(),
-                    provider: configuration.provider.clone(),
                     endpoint: configuration.endpoint.clone(),
                 },
             )
@@ -395,9 +389,12 @@ fn main() -> Result<()> {
         .llms
         .iter()
         .map(|(name, configuration)| {
-            ConfiguredLlm::from_configuration(configuration).map(|client| (name.clone(), client))
+            (
+                name.clone(),
+                OpenAiClient::new(&configuration.endpoint, &configuration.model),
+            )
         })
-        .collect::<Result<HashMap<_, _>>>()?;
+        .collect::<HashMap<_, _>>();
     let defaults = ClientDefaults {
         server: tool_server_from_endpoint(&config.client.url)?,
         username: select_username(&args.users)?,
@@ -564,7 +561,7 @@ fn run_repl(
     mut client: Option<McpClient>,
     repl_configuration: ReplClientConfiguration<'_>,
     defaults: &ClientDefaults,
-    llms: &HashMap<String, ConfiguredLlm>,
+    llms: &HashMap<String, OpenAiClient>,
     llm_probes: &HashMap<String, LlmStatusProbe>,
     llm_names: &[String],
     version: &str,
@@ -1361,7 +1358,7 @@ fn execute_tool_command(
     name: String,
     args: HashMap<String, Value>,
     natural_language_request: Option<&str>,
-    response_llm: Option<&ConfiguredLlm>,
+    response_llm: Option<&OpenAiClient>,
 ) -> Result<()> {
     let tool = tools
         .iter()
@@ -1668,13 +1665,13 @@ fn format_list_models(llm_probes: &HashMap<String, LlmStatusProbe>) -> String {
 
     let mut rows = llm_probes
         .iter()
-        .map(|(name, probe)| (name.as_str(), probe.model.as_str(), probe.provider.as_str()))
+        .map(|(name, probe)| (name.as_str(), probe.model.as_str(), probe.endpoint.as_str()))
         .collect::<Vec<_>>();
     rows.sort_by(|left, right| left.0.cmp(right.0));
 
     let name_header = "Name";
     let model_header = "Model";
-    let provider_header = "Provider";
+    let endpoint_header = "Endpoint";
 
     let name_width = rows
         .iter()
@@ -1688,23 +1685,23 @@ fn format_list_models(llm_probes: &HashMap<String, LlmStatusProbe>) -> String {
         .max()
         .unwrap_or(0)
         .max(model_header.len());
-    let provider_width = rows
+    let endpoint_width = rows
         .iter()
-        .map(|(_, _, provider)| provider.len())
+        .map(|(_, _, endpoint)| endpoint.len())
         .max()
         .unwrap_or(0)
-        .max(provider_header.len());
+        .max(endpoint_header.len());
 
     let mut lines = Vec::with_capacity(rows.len() + 2);
     lines.push(format!(
-        "{name_header:<name_width$}  {model_header:<model_width$}  {provider_header:<provider_width$}",
+        "{name_header:<name_width$}  {model_header:<model_width$}  {endpoint_header:<endpoint_width$}",
     ));
     lines.push(format!(
-        "{:-<name_width$}  {:-<model_width$}  {:-<provider_width$}",
+        "{:-<name_width$}  {:-<model_width$}  {:-<endpoint_width$}",
         "", "", "",
     ));
-    lines.extend(rows.into_iter().map(|(name, model, provider)| {
-        format!("{name:<name_width$}  {model:<model_width$}  {provider:<provider_width$}",)
+    lines.extend(rows.into_iter().map(|(name, model, endpoint)| {
+        format!("{name:<name_width$}  {model:<model_width$}  {endpoint:<endpoint_width$}",)
     }));
     lines.join("\n")
 }
@@ -1880,13 +1877,8 @@ async fn active_model_reachable(
 }
 
 fn probe_urls(probe: &LlmStatusProbe) -> Vec<String> {
-    match probe.provider.to_lowercase().as_str() {
-        "openai" => {
-            let base = normalize_openai_compatible_endpoint(&probe.endpoint);
-            vec![format!("{base}/health"), format!("{base}/v1/models")]
-        }
-        _ => vec![probe.endpoint.trim_end_matches('/').to_string()],
-    }
+    let base = normalize_openai_compatible_endpoint(&probe.endpoint);
+    vec![format!("{base}/health"), format!("{base}/v1/models")]
 }
 
 fn normalize_openai_compatible_endpoint(endpoint: &str) -> String {
@@ -2096,34 +2088,6 @@ fn format_tool_arguments(schema: &serde_json::Map<String, Value>) -> String {
         .join(", ");
 
     format!("({args})")
-}
-
-impl ConfiguredLlm {
-    fn from_configuration(configuration: &LlmConfiguration) -> Result<Self> {
-        match configuration.provider.to_lowercase().as_str() {
-            "openai" => Ok(Self::OpenAi(OpenAiClient::new(
-                &configuration.provider,
-                &configuration.endpoint,
-                &configuration.model,
-            ))),
-            _ => Err(anyhow!(
-                "Unsupported LLM provider '{}'",
-                configuration.provider
-            )),
-        }
-    }
-}
-
-impl LlmClient for ConfiguredLlm {
-    async fn chat(
-        &self,
-        messages: &[ChatMessage],
-        tools: &[ToolDefinition],
-    ) -> Result<LlmResponse> {
-        match self {
-            Self::OpenAi(client) => client.chat(messages, tools).await,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -2770,7 +2734,6 @@ mod tests {
     fn test_probe_urls_use_v1_models_for_openai_compatible_endpoint() {
         let probe = LlmStatusProbe {
             model: "ggml-org/gemma-4-E4B-it-GGUF".to_string(),
-            provider: "openai".to_string(),
             endpoint: "http://localhost:8100/v1".to_string(),
         };
 
@@ -2828,7 +2791,6 @@ mod tests {
                 "gemma".to_string(),
                 LlmStatusProbe {
                     model: "ggml-org/gemma-4-E4B-it-GGUF".to_string(),
-                    provider: "openai".to_string(),
                     endpoint: "http://localhost:8100/v1".to_string(),
                 },
             ),
@@ -2836,7 +2798,6 @@ mod tests {
                 "qwen".to_string(),
                 LlmStatusProbe {
                     model: "qwen2.5:3b".to_string(),
-                    provider: "openai".to_string(),
                     endpoint: "http://localhost:11434".to_string(),
                 },
             ),
@@ -2844,10 +2805,10 @@ mod tests {
 
         assert_eq!(
             format_list_models(&probes),
-            "Name   Model                         Provider\n\
-             -----  ----------------------------  --------\n\
-             gemma  ggml-org/gemma-4-E4B-it-GGUF  openai  \n\
-             qwen   qwen2.5:3b                    openai  "
+            "Name   Model                         Endpoint                \n\
+             -----  ----------------------------  ------------------------\n\
+             gemma  ggml-org/gemma-4-E4B-it-GGUF  http://localhost:8100/v1\n\
+             qwen   qwen2.5:3b                    http://localhost:11434  "
         );
     }
 

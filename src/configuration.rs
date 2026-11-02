@@ -117,11 +117,9 @@ pub struct PgmonetaMcpConfiguration {
 /// where you configure the connection to a local LLM inference server.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LlmConfiguration {
-    /// The LLM provider backend. Required when `[llm]` is present.
-    pub provider: String,
     /// The endpoint URL for the LLM server. Required when `[llm]` is present.
     pub endpoint: String,
-    /// The model name to use for inference. Defaults to a provider-specific value.
+    /// The model name to use for inference. Required when `[llm]` is present.
     #[serde(default)]
     pub model: String,
     /// Maximum number of tool-calling rounds per user prompt. Default: `10`.
@@ -363,13 +361,8 @@ fn normalize_client_configuration(
 }
 
 fn normalize_llm_configuration(llm: &mut LlmConfiguration) -> anyhow::Result<()> {
-    llm.provider = llm.provider.trim().to_string();
     llm.endpoint = llm.endpoint.trim().to_string();
     llm.model = llm.model.trim().to_string();
-
-    if llm.provider.is_empty() {
-        return Err(anyhow!("LLM provider must not be empty"));
-    }
 
     if llm.endpoint.is_empty() {
         return Err(anyhow!("LLM endpoint must not be empty"));
@@ -379,7 +372,7 @@ fn normalize_llm_configuration(llm: &mut LlmConfiguration) -> anyhow::Result<()>
         return Err(anyhow!("LLM model must not be empty"));
     }
 
-    validate_llm_provider(&llm.provider)
+    Ok(())
 }
 
 fn parse_client_llm_profiles(
@@ -388,7 +381,6 @@ fn parse_client_llm_profiles(
     sections
         .into_iter()
         .map(|(name, values)| {
-            let provider = values.get("provider").cloned().unwrap_or_default();
             let endpoint = values.get("endpoint").cloned().unwrap_or_default();
             let model = values.get("model").cloned().unwrap_or_default();
             let max_tool_rounds = match values.get("max_tool_rounds") {
@@ -406,7 +398,6 @@ fn parse_client_llm_profiles(
             Ok((
                 name,
                 LlmConfiguration {
-                    provider,
                     endpoint,
                     model,
                     max_tool_rounds,
@@ -414,13 +405,6 @@ fn parse_client_llm_profiles(
             ))
         })
         .collect()
-}
-
-fn validate_llm_provider(provider: &str) -> anyhow::Result<()> {
-    match provider.to_lowercase().as_str() {
-        "openai" => Ok(()),
-        _ => Err(anyhow!("Unsupported LLM provider '{}'", provider)),
-    }
 }
 
 pub fn default_compression() -> String {
@@ -461,7 +445,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             file,
-            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\ntimeout = 15\n\n[llm]\nprovider = openai\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\nmax_tool_rounds = 7\n"
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\ntimeout = 15\n\n[llm]\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\nmax_tool_rounds = 7\n"
         )
         .unwrap();
 
@@ -472,7 +456,6 @@ mod tests {
         assert_eq!(conf.client.model, "llm");
 
         let llm = conf.llms.get("llm").unwrap();
-        assert_eq!(llm.provider, "openai");
         assert_eq!(llm.endpoint, "http://localhost:8100/v1");
         assert_eq!(llm.model, "ggml-org/gemma-4-E4B-it-GGUF");
         assert_eq!(llm.max_tool_rounds, 7);
@@ -500,7 +483,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             file,
-            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\nmodel = gemma\n\n[gemma]\nprovider = openai\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\n\n[coder]\nprovider = openai\nendpoint = http://localhost:8200/v1\nmodel = unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\n"
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\nmodel = gemma\n\n[gemma]\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\n\n[coder]\nendpoint = http://localhost:8200/v1\nmodel = unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\n"
         )
         .unwrap();
 
@@ -508,8 +491,14 @@ mod tests {
 
         assert_eq!(conf.client.model, "gemma");
         assert_eq!(conf.llms.len(), 2);
-        assert_eq!(conf.llms.get("gemma").unwrap().provider, "openai");
-        assert_eq!(conf.llms.get("coder").unwrap().provider, "openai");
+        assert_eq!(
+            conf.llms.get("gemma").unwrap().endpoint,
+            "http://localhost:8100/v1"
+        );
+        assert_eq!(
+            conf.llms.get("coder").unwrap().endpoint,
+            "http://localhost:8200/v1"
+        );
     }
 
     #[test]
@@ -517,7 +506,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             file,
-            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\n\n[gemma]\nprovider = openai\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\n\n[coder]\nprovider = openai\nendpoint = http://localhost:8200/v1\nmodel = unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\n"
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\n\n[gemma]\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\n\n[coder]\nendpoint = http://localhost:8200/v1\nmodel = unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF\n"
         )
         .unwrap();
 

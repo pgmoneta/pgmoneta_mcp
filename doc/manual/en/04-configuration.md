@@ -63,7 +63,6 @@ port = 5000
 metrics = 5001
 
 [llm]
-provider = openai
 endpoint = http://localhost:8100/v1
 model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
@@ -128,12 +127,11 @@ backup management. See the **Local LLM** chapter or
 
 | Property | Default | Unit | Required | Description |
 | :------- | :------ | :--- | :------- | :---------- |
-| `provider` | - | String | Yes | Must be `openai` |
 | `endpoint` | - | String | Yes | OpenAI API URL, normally ending in `/v1` |
 | `model` | - | String | Yes | The model name to use for inference |
 | `max_tool_rounds` | `10` | Int | No | Maximum tool-calling iterations per user prompt |
 
-When `[llm]` is present, `provider`, `endpoint`, and `model` must not be empty.
+When `[llm]` is present, `endpoint` and `model` must not be empty.
 
 ## Users configuration
 
@@ -174,7 +172,6 @@ timeout = 30
 model = gemma
 
 [gemma]
-provider = openai
 endpoint = http://localhost:8100/v1
 model = ggml-org/gemma-4-E4B-it-GGUF
 max_tool_rounds = 10
@@ -197,7 +194,6 @@ Named client LLM profiles use the same keys as `[llm]`:
 
 | Property | Required | Default | Description |
 | :------- | :------- | :------ | :---------- |
-| `provider` | Yes | - | Must be `openai` |
 | `endpoint` | Yes | - | OpenAI API URL |
 | `model` | Yes | - | Model identifier |
 | `max_tool_rounds` | No | `10` | Maximum tool-calling iterations per prompt |

@@ -26,10 +26,12 @@ use std::collections::HashMap;
 /// function calling specification.
 pub struct OpenAiClient {
     http_client: Client,
-    provider_name: String,
     endpoint: String,
     model: String,
 }
+
+/// Name used in log and error messages.
+const LLM_NAME: &str = "OpenAI";
 
 fn normalize_openai_endpoint(endpoint: &str) -> String {
     let endpoint = endpoint.trim_end_matches('/');
@@ -118,13 +120,11 @@ impl OpenAiClient {
     /// Creates a new `OpenAiClient`.
     ///
     /// # Arguments
-    /// * `provider_name` - The logical name of the backend (`openai`).
     /// * `endpoint` - The base URL of the inference server (e.g., `http://localhost:8080`).
     /// * `model` - The model ID or name to include in chat requests.
-    pub fn new(provider_name: &str, endpoint: &str, model: &str) -> Self {
+    pub fn new(endpoint: &str, model: &str) -> Self {
         Self {
             http_client: Client::new(),
-            provider_name: provider_name.to_string(),
             endpoint: normalize_openai_endpoint(endpoint),
             model: model.to_string(),
         }
@@ -149,18 +149,13 @@ impl OpenAiClient {
                     .send()
                     .await
                     .map_err(|e| {
-                        anyhow!(
-                            "Cannot reach {} at {}: {}",
-                            self.provider_name,
-                            self.endpoint,
-                            e
-                        )
+                        anyhow!("Cannot reach {} at {}: {}", LLM_NAME, self.endpoint, e)
                     })?;
 
                 if !resp.status().is_success() {
                     return Err(anyhow!(
                         "{} health check failed (tried /health and /v1/models)",
-                        self.provider_name,
+                        LLM_NAME,
                     ));
                 }
                 Ok(())
@@ -179,12 +174,12 @@ impl OpenAiClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| anyhow!("Failed to list models from {}: {}", self.provider_name, e))?;
+            .map_err(|e| anyhow!("Failed to list models from {}: {}", LLM_NAME, e))?;
 
         if !resp.status().is_success() {
             return Err(anyhow!(
                 "Failed to list models from {}, status: {}",
-                self.provider_name,
+                LLM_NAME,
                 resp.status()
             ));
         }
@@ -223,11 +218,10 @@ impl LlmClient for OpenAiClient {
         };
 
         tracing::debug!(
-            provider = %self.provider_name,
             model = %self.model,
             messages = messages.len(),
             tools = tools.len(),
-            "Sending chat request to OpenAI-compatible provider"
+            "Sending chat request to OpenAI-compatible server"
         );
 
         let resp = self
@@ -236,38 +230,29 @@ impl LlmClient for OpenAiClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to send chat request to {}: {}",
-                    self.provider_name,
-                    e
-                )
-            })?;
+            .map_err(|e| anyhow!("Failed to send chat request to {}: {}", LLM_NAME, e))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             return Err(anyhow!(
                 "{} chat completion failed (status {}): {}",
-                self.provider_name,
+                LLM_NAME,
                 status,
                 body
             ));
         }
 
-        let chat_resp: OpenAiChatResponse = resp.json().await.map_err(|e| {
-            anyhow!(
-                "Failed to parse {} chat response: {}",
-                self.provider_name,
-                e
-            )
-        })?;
+        let chat_resp: OpenAiChatResponse = resp
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse {} chat response: {}", LLM_NAME, e))?;
 
         let message = chat_resp
             .choices
             .into_iter()
             .next()
-            .ok_or_else(|| anyhow!("{} returned empty choices list", self.provider_name))?
+            .ok_or_else(|| anyhow!("{} returned empty choices list", LLM_NAME))?
             .message;
 
         match message.tool_calls {
@@ -374,14 +359,14 @@ mod tests {
     /// Verifies the OpenAiClient is constructed correctly and trims trailing slashes.
     #[test]
     fn test_client_construction() {
-        let client = OpenAiClient::new("openai", "http://localhost:8080/", "my-model");
+        let client = OpenAiClient::new("http://localhost:8080/", "my-model");
         assert_eq!(client.endpoint(), "http://localhost:8080");
         assert_eq!(client.model(), "my-model");
     }
 
     #[test]
     fn test_client_construction_normalizes_v1_suffix() {
-        let client = OpenAiClient::new("openai", "http://localhost:8100/v1", "my-model");
+        let client = OpenAiClient::new("http://localhost:8100/v1", "my-model");
         assert_eq!(client.endpoint(), "http://localhost:8100");
         assert_eq!(client.model(), "my-model");
     }
