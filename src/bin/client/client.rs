@@ -15,6 +15,7 @@
 
 mod init;
 mod markdown;
+mod natural;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use inquire::Select;
@@ -31,7 +32,8 @@ use rustyline::hint::Hinter;
 use rustyline::history::{DefaultHistory, History};
 use rustyline::validate::Validator;
 use rustyline::{
-    Cmd, Context as ReadlineContext, Editor, Helper, KeyCode, KeyEvent, Modifiers, Movement,
+    Cmd, ConditionalEventHandler, Context as ReadlineContext, Editor, Event, EventContext,
+    EventHandler, Helper, KeyCode, KeyEvent, Modifiers, Movement, RepeatCount,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -40,6 +42,8 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
@@ -51,9 +55,13 @@ const CTRL_C_EXIT_TIMEOUT: Duration = Duration::from_secs(2);
 const CLIENT_NAME: &str = "pgmoneta MCP client";
 const CLIENT_TITLE_LABEL: &str = "pgmoneta MCP/client";
 const CLEAR_TERMINAL_SEQUENCE: &str = "\x1b[2J\x1b[H";
+/// Clears the screen and the scrollback buffer, so only what is printed
+/// afterwards (the status banner) remains.
+const CLEAR_SCREEN_AND_SCROLLBACK_SEQUENCE: &str = "\x1b[H\x1b[2J\x1b[3J";
 const CTRL_C_EXIT_MESSAGE: &str = "Press Ctrl+c again to quit";
 const LOGO_ART_COLOR: &str = "\x1b[38;5;202m";
 const ANSI_RESET: &str = "\x1b[0m";
+const GHOST_TEXT_COLOR: &str = "\x1b[38;2;120;120;120m";
 const CLIENT_LOGO_ART: &[&str] = &[
     " ▄▄▀███▄▄▄▄",
     "███▄▀ █████▄",
@@ -107,7 +115,7 @@ CRITICAL RULES: \
 const HELP_TEXT: &str = "\
 Basic usage:
   /help                 Show this help
-  /clear                Clear the terminal and reprint the status header
+  /clear                Clear the screen, leaving only the status banner
   /connect [url]        Connect to [url] or the configured MCP server target
   /disconnect           Disconnect from the current MCP server target
   /reload               Reconnect with the original client URL and model configuration
@@ -117,51 +125,7 @@ Basic usage:
   /model [name]         Show or switch the active LLM profile for natural-language requests
   /tools                List available MCP tools
   /exit or /quit        Exit the client
-
-The client injects `username` from the users file automatically.
-Required tool arguments such as `server` must be provided explicitly. If any
-required arguments are missing, the client reports them before executing.
-
-When one or more LLM profiles are configured in `pgmoneta-mcp-client.conf`, you can
-also enter natural-language requests such as `List backups on primary server`.
-The client asks the LLM to select one of the tools from `/tools` and build the
-matching JSON arguments before executing it.
-
-Metric queries use the `metric` tool with JSON arguments such as
-`metric {\"name\":\"pgmoneta_version\"}` or
-`metric {\"name\":\"pgmoneta_retention_server\",\"attributes\":{\"server\":\"primary\"}}`.
-Use `attributes` (or `labels`) to filter Prometheus labels. If omitted, all
-matching metric samples are returned.
-
-Use `/model` to show the current LLM profile and `/model <name>` to switch to
-another configured profile. Press Tab after `/model ` to complete the available
-profile names.
-
-Use `/clear` to clear the current terminal when the client is attached to a
-real terminal and then reprint the current status header.
-
-`/connect [url]` switches the current MCP target. If you omit `[url]`, the client
-uses the configured URL. If the client is already connected, it disconnects first.
-The prompt and status header show the current MCP target URL, including after a
-failed `/connect` or after `/disconnect`.
-
-`/reload` disconnects the current session, restores the MCP target URL and
-active `/model` selection from the client configuration loaded at startup, and
-reconnects with that original state.
-
-Developer mode is intended for direct MCP/tool work. It expects explicit
-`<tool-name> {JSON}` input and prints the full JSON response without the
-human-readable translation used in user mode.
-
-Non-empty input lines are recorded in history as entered. If the first
-non-whitespace character is `#`, the line is treated as a comment and ignored
-for execution.
-
-The input line supports readline-style history and editing shortcuts such as
-arrow history navigation, Home/End, Ctrl+A/E, Ctrl+B/F, Ctrl+R, and Ctrl+U/K.
-Press Ctrl+C once to arm exit and show a confirmation message; press Ctrl+C
-again within 2 seconds to quit. Command history is persisted in
-~/.pgmoneta-mcp/pgmoneta-mcp-client.history.";
+";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -230,6 +194,25 @@ type ClientEditor = Editor<ClientHelper, DefaultHistory>;
 
 struct ClientHelper {
     llm_names: Vec<String>,
+    ghost: Arc<GhostState>,
+}
+
+/// Which of the ghost candidates is previewed. Shift+Tab advances `index`;
+/// it starts over whenever the input line changes.
+#[derive(Debug, Default)]
+struct GhostState {
+    index: AtomicUsize,
+    last_input: Mutex<String>,
+}
+
+/// Tab accepts the ghost text (one word at a time for multi-word
+/// natural-language forms) and otherwise falls back to normal completion.
+struct AcceptGhostHandler;
+
+/// Shift+Tab previews the next ghost candidate, and otherwise falls back to
+/// normal backward completion.
+struct CycleGhostHandler {
+    ghost: Arc<GhostState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,7 +228,82 @@ struct InterruptState {
 
 impl ClientHelper {
     fn new(llm_names: Vec<String>) -> Self {
-        Self { llm_names }
+        Self {
+            llm_names,
+            ghost: Arc::new(GhostState::default()),
+        }
+    }
+
+    /// Everything the part-typed `input` could still grow into, as the
+    /// trailing characters that complete each candidate: slash commands,
+    /// profile names after `/model ` (or `use model `), and the
+    /// natural-language forms of the slash commands.
+    fn ghost_candidates(&self, input: &str) -> Vec<String> {
+        let suffixes = |candidates: &mut dyn Iterator<Item = &str>, prefix: &str| {
+            candidates
+                .filter(|candidate| candidate.starts_with(prefix) && candidate.len() > prefix.len())
+                .map(|candidate| candidate[prefix.len()..].to_string())
+                .collect::<Vec<_>>()
+        };
+
+        if is_slash_command_prefix(input) {
+            return suffixes(&mut SLASH_COMMANDS.iter().copied(), input);
+        }
+
+        let model_prefix = model_completion_prefix(input)
+            .map(|(_, prefix)| prefix)
+            .or_else(|| {
+                natural::natural_argument_prefix(input)
+                    .filter(|(command, _, _)| *command == MODEL_COMMAND)
+                    .map(|(_, _, prefix)| prefix)
+            });
+        if let Some(prefix) = model_prefix {
+            let mut names = self
+                .llm_names
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            names.sort_unstable();
+            return suffixes(&mut names.into_iter(), prefix);
+        }
+
+        natural::natural_language_ghost_candidates(input)
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    }
+}
+
+impl ConditionalEventHandler for AcceptGhostHandler {
+    fn handle(
+        &self,
+        _evt: &Event,
+        _n: RepeatCount,
+        _positive: bool,
+        ctx: &EventContext<'_>,
+    ) -> Option<Cmd> {
+        if ctx.pos() != ctx.line().len() {
+            return None;
+        }
+        ctx.hint_text()
+            .filter(|hint| !hint.is_empty())
+            .map(|hint| Cmd::Insert(1, natural::first_ghost_word(hint).to_string()))
+    }
+}
+
+impl ConditionalEventHandler for CycleGhostHandler {
+    fn handle(
+        &self,
+        _evt: &Event,
+        _n: RepeatCount,
+        _positive: bool,
+        ctx: &EventContext<'_>,
+    ) -> Option<Cmd> {
+        if !ctx.has_hint() {
+            return None;
+        }
+        self.ghost.index.fetch_add(1, Ordering::Relaxed);
+        Some(Cmd::Repaint)
     }
 }
 
@@ -314,8 +372,33 @@ impl Completer for ClientHelper {
             return Ok((start, matches));
         }
 
+        if let Some((MODEL_COMMAND, start, model_prefix)) = natural::natural_argument_prefix(prefix)
+        {
+            let mut matches = self
+                .llm_names
+                .iter()
+                .filter(|name| name.starts_with(model_prefix))
+                .map(|name| Pair {
+                    display: name.clone(),
+                    replacement: name.clone(),
+                })
+                .collect::<Vec<_>>();
+            matches.sort_by(|left, right| left.replacement.cmp(&right.replacement));
+            return Ok((start, matches));
+        }
+
         if !is_slash_command_prefix(prefix) {
-            return Ok((pos, Vec::new()));
+            let matches = natural::natural_language_ghost_candidates(prefix)
+                .into_iter()
+                .map(|suffix| {
+                    let phrase = format!("{prefix}{suffix}");
+                    Pair {
+                        display: phrase.trim_end().to_string(),
+                        replacement: phrase,
+                    }
+                })
+                .collect::<Vec<_>>();
+            return Ok((0, matches));
         }
 
         let mut matches = SLASH_COMMANDS
@@ -335,14 +418,34 @@ impl Completer for ClientHelper {
 impl Hinter for ClientHelper {
     type Hint = String;
 
-    fn hint(&self, _line: &str, _pos: usize, _ctx: &ReadlineContext<'_>) -> Option<Self::Hint> {
-        None
+    fn hint(&self, line: &str, pos: usize, _ctx: &ReadlineContext<'_>) -> Option<Self::Hint> {
+        if pos != line.len() {
+            return None;
+        }
+
+        if let Ok(mut last_input) = self.ghost.last_input.lock()
+            && *last_input != line
+        {
+            line.clone_into(&mut last_input);
+            self.ghost.index.store(0, Ordering::Relaxed);
+        }
+
+        let candidates = self.ghost_candidates(line);
+        if candidates.is_empty() {
+            return None;
+        }
+        let index = self.ghost.index.load(Ordering::Relaxed) % candidates.len();
+        candidates.into_iter().nth(index)
     }
 }
 
 impl Highlighter for ClientHelper {
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
         Cow::Borrowed(line)
+    }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        Cow::Owned(format!("{GHOST_TEXT_COLOR}{hint}{ANSI_RESET}"))
     }
 
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
@@ -437,6 +540,15 @@ fn main() -> Result<()> {
         env!("CARGO_PKG_VERSION"),
         active_model,
     )
+}
+
+fn clear_screen_and_scrollback(output: &mut impl io::Write, is_terminal: bool) -> io::Result<()> {
+    if !is_terminal {
+        return Ok(());
+    }
+
+    output.write_all(CLEAR_SCREEN_AND_SCROLLBACK_SEQUENCE.as_bytes())?;
+    output.flush()
 }
 
 fn clear_startup_terminal(output: &mut impl io::Write, is_terminal: bool) -> io::Result<()> {
@@ -595,6 +707,8 @@ fn run_repl(
                 if is_comment_input(line) {
                     continue;
                 }
+                let translated = natural::translate_natural_language(line);
+                let line = translated.as_deref().unwrap_or(line);
 
                 if line.starts_with('/') {
                     match parse_input(
@@ -885,6 +999,16 @@ fn configure_key_bindings(editor: &mut ClientEditor) {
         KeyEvent(KeyCode::End, Modifiers::NONE),
         Cmd::Move(Movement::EndOfLine),
     );
+    editor.bind_sequence(
+        KeyEvent(KeyCode::Tab, Modifiers::NONE),
+        EventHandler::Conditional(Box::new(AcceptGhostHandler)),
+    );
+    if let Some(ghost) = editor.helper().map(|helper| Arc::clone(&helper.ghost)) {
+        editor.bind_sequence(
+            KeyEvent(KeyCode::BackTab, Modifiers::NONE),
+            EventHandler::Conditional(Box::new(CycleGhostHandler { ghost })),
+        );
+    }
 }
 
 fn initialize_history(editor: &mut ClientEditor) -> Result<()> {
@@ -1822,7 +1946,7 @@ fn clear_and_print_header(
     ));
     let mut stdout = io::stdout();
     let is_terminal = stdout.is_terminal();
-    clear_startup_terminal(&mut stdout, is_terminal).context("Failed to clear terminal")?;
+    clear_screen_and_scrollback(&mut stdout, is_terminal).context("Failed to clear terminal")?;
     print_status_header(
         version,
         client_url,
@@ -2241,6 +2365,35 @@ mod tests {
         clear_startup_terminal(&mut output, true).unwrap();
 
         assert_eq!(output, CLEAR_TERMINAL_SEQUENCE.as_bytes());
+    }
+
+    #[test]
+    fn test_clear_screen_and_scrollback_for_terminals() {
+        let mut output = Vec::new();
+
+        clear_screen_and_scrollback(&mut output, true).unwrap();
+
+        assert_eq!(output, b"\x1b[H\x1b[2J\x1b[3J");
+    }
+
+    #[test]
+    fn test_clear_screen_and_scrollback_skips_non_terminals() {
+        let mut output = Vec::new();
+
+        clear_screen_and_scrollback(&mut output, false).unwrap();
+
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn test_natural_language_clear_matches_slash_clear() {
+        let models = sample_models();
+        let command = natural::translate_natural_language("clear").unwrap();
+
+        assert_eq!(
+            parse_input(&command, &HashSet::new(), &models, true, ClientMode::User).unwrap(),
+            ClientCommand::Clear
+        );
     }
 
     #[test]
@@ -2830,6 +2983,104 @@ mod tests {
                 .iter()
                 .all(|line| line.chars().count() == expected_width)
         );
+    }
+
+    #[test]
+    fn test_ghost_hint_completes_slash_commands() {
+        let helper = ClientHelper::new(vec!["gemma".to_string(), "qwen".to_string()]);
+        let history = DefaultHistory::new();
+        let context = ReadlineContext::new(&history);
+
+        assert_eq!(helper.hint("/q", 2, &context).as_deref(), Some("uit"));
+        assert_eq!(helper.hint("/quit", 5, &context), None);
+        assert_eq!(helper.hint("/q", 1, &context), None);
+        assert_eq!(helper.hint("", 0, &context), None);
+    }
+
+    #[test]
+    fn test_ghost_hint_completes_natural_language_forms() {
+        let helper = ClientHelper::new(vec!["gemma".to_string(), "qwen".to_string()]);
+        let history = DefaultHistory::new();
+        let context = ReadlineContext::new(&history);
+
+        assert_eq!(helper.hint("qu", 2, &context).as_deref(), Some("it"));
+        assert_eq!(helper.hint("list t", 6, &context).as_deref(), Some("ools"));
+        assert_eq!(
+            helper.hint("use model q", 11, &context).as_deref(),
+            Some("wen")
+        );
+        assert_eq!(
+            helper.hint("/model g", 8, &context).as_deref(),
+            Some("emma")
+        );
+        assert_eq!(helper.hint("list backups", 12, &context), None);
+    }
+
+    #[test]
+    fn test_ghost_hint_cycles_and_resets_when_input_changes() {
+        let helper = ClientHelper::new(vec!["gemma".to_string(), "qwen".to_string()]);
+        let history = DefaultHistory::new();
+        let context = ReadlineContext::new(&history);
+
+        assert_eq!(helper.hint("/d", 2, &context).as_deref(), Some("eveloper"));
+        helper.ghost.index.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(helper.hint("/d", 2, &context).as_deref(), Some("isconnect"));
+        helper.ghost.index.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(helper.hint("/d", 2, &context).as_deref(), Some("eveloper"));
+        assert_eq!(helper.hint("/de", 3, &context).as_deref(), Some("veloper"));
+        assert_eq!(helper.ghost.index.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_natural_language_completion() {
+        let helper = ClientHelper::new(vec!["gemma".to_string(), "qwen".to_string()]);
+        let history = DefaultHistory::new();
+        let context = ReadlineContext::new(&history);
+
+        let (start, matches) = helper.complete("li", 2, &context).unwrap();
+        assert_eq!(start, 0);
+        assert_eq!(
+            matches
+                .into_iter()
+                .map(|candidate| candidate.replacement)
+                .collect::<Vec<_>>(),
+            vec!["list models", "list tools"]
+        );
+
+        let (start, matches) = helper.complete("use model g", 11, &context).unwrap();
+        assert_eq!(start, 10);
+        assert_eq!(matches[0].replacement, "gemma");
+    }
+
+    #[test]
+    fn test_natural_language_help_matches_slash_help() {
+        let models = sample_models();
+        let slash = parse_input("/help", &HashSet::new(), &models, true, ClientMode::User).unwrap();
+        let natural = natural::translate_natural_language("help").unwrap();
+        let natural =
+            parse_input(&natural, &HashSet::new(), &models, true, ClientMode::User).unwrap();
+
+        assert_eq!(slash, ClientCommand::Help);
+        assert_eq!(natural, slash);
+    }
+
+    #[test]
+    fn test_natural_language_quit_exits() {
+        let models = sample_models();
+        for input in ["quit", "exit", "bye", "QUIT"] {
+            let command = natural::translate_natural_language(input).unwrap();
+            assert_eq!(
+                parse_input(&command, &HashSet::new(), &models, true, ClientMode::User).unwrap(),
+                ClientCommand::Exit
+            );
+        }
+    }
+
+    #[test]
+    fn test_help_documents_every_command() {
+        for command in SLASH_COMMANDS {
+            assert!(HELP_TEXT.contains(command), "{command} missing from help");
+        }
     }
 
     #[test]

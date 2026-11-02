@@ -471,12 +471,15 @@ the client is already connected, it disconnects before reconnecting.
 active `/model` selection from the client configuration loaded at startup, and
 reconnects with that original state.
 
-`/clear` clears the current terminal when the client is attached to a real
-terminal and then reprints the current status header.
+`/clear` (or `clear`) clears the screen and the scrollback buffer when the
+client is attached to a real terminal and then reprints the current status
+banner, so the banner is all that remains.
 
 The interactive prompt uses readline-style editing, explicit Home/End line
-navigation, slash-command Tab completion, `/model [name]` Tab completion based
-on configured LLM profile names, and history navigation, and persists the latest
+navigation, grey ghost-text hints with Tab completion for slash commands, their
+natural-language forms (`quit`, `list tools`, `use model <name>`, ...) and
+configured LLM profile names, Shift+Tab cycling between ghost candidates, and
+history navigation, and persists the latest
 1000 commands in `~/.pgmoneta-mcp/pgmoneta-mcp-client.history`. Press Ctrl+C
 once to display `Press Ctrl+c again to quit`; press Ctrl+C again within 2
 seconds to exit, otherwise the pending quit state resets automatically.
@@ -484,6 +487,14 @@ seconds to exit, otherwise the pending quit state resets automatically.
 Non-empty input lines are recorded in history as entered. If the first
 non-whitespace character is `#`, the line is treated as a comment, is still
 recorded in history, does not execute, and immediately shows a fresh prompt.
+
+The natural-language forms live in `NATURAL_LANGUAGE_BINDINGS` in
+`src/bin/client/natural.rs`. Each is translated to its slash command before
+parsing, so `help` and `/help` produce identical output. A phrase ending in a
+space takes a single argument token. Avoid bare MCP tool names such as `status`
+as phrases; `clear` is the one exception, and the `clear` tool stays reachable
+as `clear {}` in developer mode. A test checks that every slash command
+appears in the `/help` text.
 
 `/list-models` prints the configured LLM profiles as an aligned table with the
 columns `Name`, `Model`, and `Endpoint`.

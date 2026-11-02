@@ -122,7 +122,7 @@ Switch back to user mode:
 The interactive shell supports these commands:
 
 ``` text
-/clear                Clear the terminal and reprint the status header
+/clear                Clear the screen, leaving only the status banner
 /connect [url]        Connect to [url] or the configured MCP server target
 /disconnect           Disconnect from the current MCP server target
 /reload               Reconnect with the original client URL and model configuration
@@ -136,14 +136,42 @@ The interactive shell supports these commands:
 /exit or /quit        Exit the client
 ```
 
+The commands also have natural-language forms that are handled locally, without
+the leading slash and without going to the LLM. `help` prints exactly the same
+output as `/help`, and `quit` exits like `/quit`:
+
+``` text
+help, show help, show commands             /help
+clear, clear screen, clear terminal        /clear
+connect, connect to <url>, connect <url>   /connect [url]
+disconnect                                 /disconnect
+reload client, reconnect                   /reload
+user mode, switch to user mode             /user
+developer mode, switch to developer mode   /developer
+list models, show models, models           /list-models
+show model, current model, model           /model
+use model <name>, model <name>             /model <name>
+switch to model <name>                     /model <name>
+list tools, show tools, tools              /tools
+quit, exit, bye                            /quit
+```
+
+The forms are matched case-insensitively, and the ones taking an argument
+accept a single word only, so a longer sentence is still sent to the LLM.
+`status` on its own is an MCP tool, so it is not used as a form. `clear` is an
+MCP tool too, but on its own it clears the screen; reach the tool with
+`clear {}` in developer mode, or with a longer request such as
+`clear the prometheus statistics` in user mode.
+
 `/connect [url]` switches the current MCP target. If `[url]` is omitted, the
 client reconnects to the configured target from `pgmoneta-mcp-client.conf`.
 
 `/reload` disconnects the current session, restores the configured MCP target
 and startup `/model` selection, and reconnects.
 
-`/clear` clears the current terminal when attached to a real terminal and then
-reprints the current status header.
+`/clear` (or `clear`) clears the screen and the scrollback buffer when attached
+to a real terminal and then reprints the current status banner, so the banner is
+all that remains.
 
 ## Prompt and history
 
@@ -161,9 +189,16 @@ Non-empty input lines are recorded in history. If the first non-whitespace
 character is `#`, the line is treated as a comment, recorded in history, and not
 executed.
 
-The shell supports readline-style editing and history shortcuts. Slash commands
-support Tab completion, and `/model` supports Tab completion for configured
-profile names. History is stored in:
+The shell supports readline-style editing and history shortcuts. While typing,
+the rest of a matching slash command, natural-language form, or profile name
+(after `/model ` or `use model `) is shown as grey ghost text:
+
+* Tab accepts the ghost text, one word at a time for multi-word forms
+* Shift+Tab cycles through the other matching candidates
+* Right arrow accepts all of the ghost text
+* With no ghost text, Tab lists the possible completions
+
+History is stored in:
 
 ``` text
 ~/.pgmoneta-mcp/pgmoneta-mcp-client.history
