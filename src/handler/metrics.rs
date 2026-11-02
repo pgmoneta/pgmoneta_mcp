@@ -267,9 +267,25 @@ fn parse_metric_sample(line: &str) -> Result<MetricSample> {
 
 fn split_metric_sample_line(line: &str) -> Result<(&str, &str)> {
     let mut in_braces = false;
+    let mut in_quotes = false;
+    let mut escaped = false;
 
     for (idx, ch) in line.char_indices() {
+        // Label values are quoted and may legally contain '{', '}' and whitespace,
+        // so none of those characters are structural while inside quotes.
+        if in_quotes {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_quotes = false;
+            }
+            continue;
+        }
+
         match ch {
+            '"' if in_braces => in_quotes = true,
             '{' => in_braces = true,
             '}' => in_braces = false,
             ch if ch.is_whitespace() && !in_braces => {
@@ -341,6 +357,7 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
         idx += 1;
 
         let mut value = String::new();
+        let mut terminated = false;
         while idx < input.len() {
             match input.as_bytes()[idx] {
                 b'\\' => {
@@ -359,6 +376,7 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
                 }
                 b'"' => {
                     idx += 1;
+                    terminated = true;
                     break;
                 }
                 _ => {
@@ -370,6 +388,10 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
                     idx += ch.len_utf8();
                 }
             }
+        }
+
+        if !terminated {
+            bail!("Unterminated quoted value for metric attribute '{}'", key);
         }
 
         attributes.insert(key.to_string(), value);
@@ -537,5 +559,33 @@ mod tests {
                 ("quote".to_string(), "a\"b".to_string()),
             ])
         );
+    }
+    #[test]
+    fn test_parse_metric_sample_label_value_with_braces() {
+        let sample =
+            parse_metric_sample(r#"pgmoneta_query{q="select {x} from t",db="a b"} 7"#).unwrap();
+        assert_eq!(sample.name, "pgmoneta_query");
+        assert_eq!(sample.value, "7");
+        assert_eq!(sample.attributes.get("q").unwrap(), "select {x} from t");
+        assert_eq!(sample.attributes.get("db").unwrap(), "a b");
+    }
+
+    #[test]
+    fn test_parse_metric_sample_label_value_with_lone_closing_brace() {
+        let sample = parse_metric_sample(r#"m{msg="a } b"} 9"#).unwrap();
+        assert_eq!(sample.value, "9");
+        assert_eq!(sample.attributes.get("msg").unwrap(), "a } b");
+    }
+
+    #[test]
+    fn test_parse_metric_sample_escaped_quote_in_label_value() {
+        let sample = parse_metric_sample(r#"m{msg="say \"hi } there\""} 3"#).unwrap();
+        assert_eq!(sample.value, "3");
+        assert_eq!(sample.attributes.get("msg").unwrap(), "say \"hi } there\"");
+    }
+
+    #[test]
+    fn test_parse_metric_attribute_set_rejects_unterminated_quote() {
+        assert!(parse_metric_attribute_set(r#"a="bar"#).is_err());
     }
 }

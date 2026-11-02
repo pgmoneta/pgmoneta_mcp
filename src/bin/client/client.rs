@@ -1185,9 +1185,24 @@ fn format_text_response(text: &str) -> Result<String> {
 
 fn metric_sample_value(sample: &str) -> Option<&str> {
     let mut in_braces = false;
+    let mut in_quotes = false;
+    let mut escaped = false;
 
     for (idx, ch) in sample.char_indices() {
+        // Quoted label values may contain braces and whitespace.
+        if in_quotes {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_quotes = false;
+            }
+            continue;
+        }
+
         match ch {
+            '"' if in_braces => in_quotes = true,
             '{' => in_braces = true,
             '}' => in_braces = false,
             ch if ch.is_whitespace() && !in_braces => {
@@ -2220,6 +2235,16 @@ mod tests {
     use rmcp::model::ContentBlock;
     use rustyline::Context as ReadlineContext;
     use serde_json::json;
+
+    #[test]
+    fn metric_sample_value_handles_braces_inside_quoted_labels() {
+        assert_eq!(
+            metric_sample_value(r#"m{q="select {x} from t"} 7"#),
+            Some("7")
+        );
+        assert_eq!(metric_sample_value(r#"m{msg="a } b"} 9"#), Some("9"));
+        assert_eq!(metric_sample_value("m 5"), Some("5"));
+    }
 
     struct MockLlm {
         response: LlmResponse,
