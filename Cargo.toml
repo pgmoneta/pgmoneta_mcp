@@ -93,3 +93,8 @@ path = "tests/info_test.rs"
 [[test]]
 name = "list_backup_test"
 path = "tests/list_backup_test.rs"
+
+[profile.release-with-debug]
+inherits = "release"
+debug = 1
+panic = "unwind"
