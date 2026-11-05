@@ -265,13 +265,33 @@ fn parse_metric_sample(line: &str) -> Result<MetricSample> {
     })
 }
 
-fn split_metric_sample_line(line: &str) -> Result<(&str, &str)> {
+pub fn split_metric_sample_line(line: &str) -> Result<(&str, &str)> {
     let mut in_braces = false;
+    let mut in_quotes = false;
+    let mut escaped = false;
 
     for (idx, ch) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
         match ch {
-            '{' => in_braces = true,
-            '}' => in_braces = false,
+            '\\' if in_quotes => {
+                escaped = true;
+            }
+            '"' if in_braces => {
+                in_quotes = !in_quotes;
+            }
+            '"' => {
+                bail!("Invalid metric sample '{}'", line);
+            }
+            '{' if !in_quotes => {
+                in_braces = true;
+            }
+            '}' if !in_quotes => {
+                in_braces = false;
+            }
             ch if ch.is_whitespace() && !in_braces => {
                 let identifier = line[..idx].trim();
                 let value = line[idx..].trim();
@@ -284,7 +304,7 @@ fn split_metric_sample_line(line: &str) -> Result<(&str, &str)> {
         }
     }
 
-    bail!("Invalid metric sample '{}'", line)
+    bail!("Unterminated metric sample '{}'", line)
 }
 
 fn parse_metric_identifier(identifier: &str) -> Result<(String, HashMap<String, String>)> {
@@ -341,6 +361,7 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
         idx += 1;
 
         let mut value = String::new();
+        let mut closed = false;
         while idx < input.len() {
             match input.as_bytes()[idx] {
                 b'\\' => {
@@ -359,6 +380,7 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
                 }
                 b'"' => {
                     idx += 1;
+                    closed = true;
                     break;
                 }
                 _ => {
@@ -370,6 +392,10 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
                     idx += ch.len_utf8();
                 }
             }
+        }
+
+        if !closed {
+            bail!("Invalid metric label set '{}'", input);
         }
 
         attributes.insert(key.to_string(), value);
@@ -537,5 +563,55 @@ mod tests {
                 ("quote".to_string(), "a\"b".to_string()),
             ])
         );
+    }
+
+    // issue #180 regression tests
+
+    #[test]
+    fn test_parse_metric_sample_label_with_braces() {
+        let sample = parse_metric_sample(r#"pgmoneta_query{q="select {x} from t"} 7"#).unwrap();
+        assert_eq!(sample.value, "7");
+        assert_eq!(
+            sample.attributes.get("q").map(String::as_str),
+            Some("select {x} from t")
+        );
+    }
+
+    #[test]
+    fn test_parse_metric_sample_escaped_quote_and_brace() {
+        let sample = parse_metric_sample(r#"m{q="a\"} b"} 3"#).unwrap();
+        assert_eq!(sample.value, "3");
+        assert_eq!(
+            sample.attributes.get("q").map(String::as_str),
+            Some(r#"a"} b"#)
+        );
+    }
+
+    #[test]
+    fn test_parse_metric_sample_stray_quote_outside_braces() {
+        assert!(parse_metric_sample(r#"pgmoneta" 1"#).is_err());
+    }
+
+    #[test]
+    fn test_parse_metric_sample_unterminated_quote() {
+        let result = parse_metric_sample(r#"pgmoneta_query{q="unterminated} 7"#);
+        assert!(
+            result.is_err(),
+            "unterminated quote must be an error and must not yield value 7"
+        );
+    }
+
+    #[test]
+    fn test_parse_metric_sample_regression_guards() {
+        let sample1 = parse_metric_sample("up 1").unwrap();
+        assert_eq!(sample1.value, "1");
+
+        let sample2 = parse_metric_sample("up 1 1700000000").unwrap();
+        assert_eq!(sample2.value, "1");
+    }
+
+    #[test]
+    fn test_parse_metric_attribute_set_unclosed_quote() {
+        assert!(parse_metric_attribute_set(r#"q="abc"#).is_err());
     }
 }
