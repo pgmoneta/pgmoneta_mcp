@@ -304,7 +304,7 @@ pub fn split_metric_sample_line(line: &str) -> Result<(&str, &str)> {
         }
     }
 
-    bail!("Invalid metric sample '{}'", line)
+    bail!("Unterminated metric sample '{}'", line)
 }
 
 fn parse_metric_identifier(identifier: &str) -> Result<(String, HashMap<String, String>)> {
