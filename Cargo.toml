@@ -94,6 +94,14 @@ path = "tests/info_test.rs"
 name = "list_backup_test"
 path = "tests/list_backup_test.rs"
 
+[profile.dev]
+opt-level = 0
+debug = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = 0
+
 [profile.release-with-debug]
 inherits = "release"
 debug = 1
