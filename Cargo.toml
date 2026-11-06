@@ -74,8 +74,8 @@ reqwest = { version = "0.13.5", default-features = false, features = ["json", "r
 prometheus-client = "0.25.2"
 inquire = "0.9.4"
 treelog = { version = "0.0.6", features = ["arbitrary-json"] }
-rustyline = "19.0.0"
-serial_test = "4.0.1"
+rustyline = "18.0.1"
+serial_test = "3.5.0"
 markdown = "1.0.0"
 syntect = { version = "5.3.0", features = ["html"] }
 [target.'cfg(windows)'.dependencies]
