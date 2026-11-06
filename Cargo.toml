@@ -23,9 +23,9 @@ name = "pgmoneta-mcp-inspector"
 path = "src/bin/inspector/main.rs"
 
 [dependencies]
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.54.1", features = ["full"] }
 serde = { version = "1.0.229", features = ["derive"] }
-rmcp = { version = "3.8.0", features = [
+rmcp = { version = "3.9.0", features = [
     "server",
     "macros",
     "client",
@@ -37,9 +37,9 @@ rmcp = { version = "3.8.0", features = [
     "schemars",
 ] }
 anyhow = "1.0.104"
-serde_json = "1.0.151"
+serde_json = "1.0.154"
 tracing = "0.1.44"
-tokio-util = "0.7.19"
+tokio-util = "0.7.20"
 tracing-subscriber = { version = "0.3.23", features = [
     "env-filter",
     "std",
@@ -48,39 +48,39 @@ tracing-subscriber = { version = "0.3.23", features = [
 ] }
 axum = { version = "0.8.9", features = ["macros"] }
 tower-http = { version = "0.7", features = ["cors"] }
-config = { version = "0.15.25", features = ["yaml"] }
+config = { version = "0.15.27", features = ["yaml"] }
 base64 = "0.23.1"
 home = "0.5.12"
 pbkdf2 = "0.13.0"
-sha2 = "0.11.0"
+sha2 = "0.11.1"
 hmac = "0.13.0"
-rand = "0.10.2"
+rand = "0.10.3"
 aes-gcm = "0.11.1"
-flate2 = "1.1.10"
-zstd = "0.14.0"
+flate2 = "1.1.11"
+zstd = "0.14.3"
 lz4 = "1.28.1"
 bzip2 = "0.6.1"
-aes = { version = "0.9.3", features = ["hazmat"] }
-zeroize = "1.9.0"
+aes = { version = "0.9.4", features = ["hazmat"] }
+zeroize = "1.9.1"
 scram = { package = "scram-2", version = "0.7.0" }
 once_cell = "1.21.4"
-clap = { version = "4.6.6", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 chrono = "0.4.45"
 rpassword = "7.5.4"
 serde_ini = "0.2.0"
 tracing-appender = "0.2.5"
 syslog-tracing = "0.3.1"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls"] }
-prometheus-client = "0.25.1"
+prometheus-client = "0.25.2"
 inquire = "0.9.4"
 treelog = { version = "0.0.6", features = ["arbitrary-json"] }
-rustyline = "18.0.1"
-serial_test = "3.5.0"
+rustyline = "19.0.0"
+serial_test = "4.0.1"
 markdown = "1.0.0"
 syntect = { version = "5.3.0", features = ["html"] }
 [target.'cfg(windows)'.dependencies]
 winlog2 = "0.3.2"
-log = "0.4.34"
+log = "0.4.35"
 
 [dev-dependencies]
 tempfile = "3.27.0"
