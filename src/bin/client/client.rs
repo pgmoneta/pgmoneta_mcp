@@ -1184,20 +1184,9 @@ fn format_text_response(text: &str) -> Result<String> {
 }
 
 fn metric_sample_value(sample: &str) -> Option<&str> {
-    let mut in_braces = false;
-
-    for (idx, ch) in sample.char_indices() {
-        match ch {
-            '{' => in_braces = true,
-            '}' => in_braces = false,
-            ch if ch.is_whitespace() && !in_braces => {
-                return sample[idx..].split_whitespace().next();
-            }
-            _ => {}
-        }
-    }
-
-    None
+    pgmoneta_mcp::handler::metrics::split_metric_sample_line(sample)
+        .ok()
+        .and_then(|(_, value)| value.split_whitespace().next())
 }
 
 fn format_json_value(value: Value, _label: &str) -> Result<String> {
@@ -3423,6 +3412,14 @@ mod tests {
         )]);
 
         assert_eq!(format_metric_tool_result(&result).unwrap(), "1");
+    }
+
+    #[test]
+    fn test_metric_sample_value_with_braces_in_label() {
+        assert_eq!(
+            metric_sample_value(r#"pgmoneta_query{q="select {x} from t"} 7"#),
+            Some("7")
+        );
     }
 
     #[test]
