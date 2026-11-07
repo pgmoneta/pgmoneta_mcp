@@ -20,9 +20,10 @@ use pgmoneta_mcp::handler::job::{
     JobListServerTool, JobListStatusTool, JobRemoveRequest, JobRemoveTool, JobRequest,
     JobStatusRequest, JobStatusTool, JobTool,
 };
+use pgmoneta_mcp::handler::restore::{RestoreRequest, RestoreTool};
 use rmcp::handler::server::router::tool::AsyncTool;
 use serde_json::Value;
-use tokio::time::{Duration, Instant, sleep};
+use tokio::time::{Duration, Instant, sleep, timeout};
 
 mod common;
 
@@ -213,4 +214,119 @@ async fn async_backup_job_lifecycle_test() {
         .expect("missing-job lookup should return a management response"),
     );
     assert_eq!(missing["Outcome"]["Status"], false, "response: {missing}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+#[ignore = "requires pgmoneta stack (see test/check.sh )"]
+async fn async_restore_job_lifecycle_test() {
+    let container = common::init_config().await;
+    let _guard = common::backup_fixture_lock().await;
+    let backup_id = common::ensure_backup(SERVER)
+        .await
+        .expect("backup fixture should be created");
+    let destination = "/tmp/restore_async_job";
+    container.ensure_absent(destination).await;
+    assert!(!container.exists(destination).await);
+
+    let handler = PgmonetaHandler::new();
+
+    let response = RestoreTool::invoke(
+        &handler,
+        RestoreRequest {
+            username: USERNAME.to_string(),
+            server: SERVER.to_string(),
+            backup_id,
+            directory: destination.to_string(),
+            asynchronous: Some(true),
+            current: None,
+            name: None,
+            xid: None,
+            time: None,
+            lsn: None,
+            inclusive: None,
+            timeline: None,
+            action: None,
+            primary: None,
+            replica: None,
+        },
+    )
+    .await
+    .expect("async restore request should be accepted");
+    let acknowledgement = parse_response(&response);
+    assert_success(&acknowledgement);
+    let job_id = acknowledgement["Response"]["JobId"]
+        .as_str()
+        .or_else(|| find_string(&acknowledgement, "JobId"))
+        .unwrap_or_else(|| {
+            panic!(
+                "pgmoneta did not return a job ID for Async: true; rebuild the test image with `test/check.sh integration`: {response}"
+            )
+        })
+        .to_string();
+    assert!(!job_id.is_empty());
+
+    let deadline = Instant::now() + Duration::from_secs(300);
+    let completed_job = loop {
+        let response = timeout(
+            Duration::from_secs(10),
+            JobTool::invoke(
+                &handler,
+                JobRequest {
+                    username: USERNAME.to_string(),
+                    job_id: job_id.clone(),
+                },
+            ),
+        )
+        .await
+        .expect("job lookup timed out")
+        .expect("job lookup should succeed");
+        let job = parse_response(&response);
+        assert_success(&job);
+        match find_string(&job, "JobState") {
+            Some("Completed") => break job,
+            Some("Failed") => panic!("async restore job failed: {job}"),
+            Some("Starting" | "Running") => {}
+            state => panic!("job response has unexpected JobState {state:?}: {job}"),
+        }
+        assert!(
+            Instant::now() < deadline,
+            "job did not finish within 5 minutes"
+        );
+        sleep(Duration::from_secs(1)).await;
+    };
+    assert_eq!(find_string(&completed_job, "JobState"), Some("Completed"));
+
+    let status = parse_response(
+        &JobStatusTool::invoke(
+            &handler,
+            JobStatusRequest {
+                username: USERNAME.to_string(),
+                server: SERVER.to_string(),
+                command: "restore".to_string(),
+            },
+        )
+        .await
+        .expect("job status should succeed"),
+    );
+    assert_success(&status);
+    assert!(
+        contains_job_id(&status, &job_id),
+        "status response: {status}"
+    );
+
+    assert!(
+        container.exists(destination).await,
+        "destination should exist"
+    );
+    assert!(
+        container.is_nonempty(destination).await,
+        "destination should be non-empty"
+    );
+
+    container.ensure_absent(destination).await;
+    assert!(
+        !container.exists(destination).await,
+        "destination should be cleaned up"
+    );
 }
