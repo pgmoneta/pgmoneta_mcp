@@ -32,6 +32,122 @@ struct PingRequest;
 
 pub struct TestEnv(Option<ContainerAsync<GenericImage>>);
 
+impl TestEnv {
+    fn ensure_local_host_for_fs(&self) {
+        let host =
+            std::env::var("PGMONETA_MCP_TEST_HOST").unwrap_or_else(|_| "localhost".to_string());
+        assert!(
+            matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1"),
+            "non-container mode std::fs helpers are valid only when PGMONETA_MCP_TEST_HOST is local (got '{host}')"
+        );
+    }
+
+    pub async fn ensure_absent(&self, path: &str) {
+        if let Some(container) = self.0.as_ref() {
+            let command = ExecCommand::new(["rm", "-rf", path]);
+            let mut result = container
+                .exec(command)
+                .await
+                .expect("ensure_absent exec should succeed");
+            let _ = result.stdout_to_vec().await;
+            assert_eq!(
+                result
+                    .exit_code()
+                    .await
+                    .expect("exit code should be available"),
+                Some(0),
+                "ensure_absent failed for {path}"
+            );
+        } else {
+            self.ensure_local_host_for_fs();
+            let p = std::path::Path::new(path);
+            if p.is_dir() {
+                let _ = std::fs::remove_dir_all(p);
+            } else if p.exists() {
+                let _ = std::fs::remove_file(p);
+            }
+            assert!(!p.exists(), "path {path} should be absent");
+        }
+    }
+
+    pub async fn exists(&self, path: &str) -> bool {
+        if let Some(container) = self.0.as_ref() {
+            let command = ExecCommand::new(["test", "-e", path]);
+            let mut result = container
+                .exec(command)
+                .await
+                .expect("exists exec should succeed");
+            let _ = result.stdout_to_vec().await;
+            result
+                .exit_code()
+                .await
+                .expect("exit code should be available")
+                == Some(0)
+        } else {
+            self.ensure_local_host_for_fs();
+            std::path::Path::new(path).exists()
+        }
+    }
+
+    pub async fn is_nonempty(&self, path: &str) -> bool {
+        if let Some(container) = self.0.as_ref() {
+            let dir_cmd = ExecCommand::new(["test", "-d", path]);
+            let mut dir_res = container
+                .exec(dir_cmd)
+                .await
+                .expect("test -d exec should succeed");
+            let _ = dir_res.stdout_to_vec().await;
+            let is_dir = dir_res
+                .exit_code()
+                .await
+                .expect("exit code should be available")
+                == Some(0);
+
+            if is_dir {
+                let ls_cmd = ExecCommand::new(["ls", "-A", path]);
+                let mut ls_res = container
+                    .exec(ls_cmd)
+                    .await
+                    .expect("ls -A exec should succeed");
+                let stdout = ls_res
+                    .stdout_to_vec()
+                    .await
+                    .expect("ls stdout should be readable");
+                let exit = ls_res
+                    .exit_code()
+                    .await
+                    .expect("exit code should be available");
+                exit == Some(0) && !stdout.is_empty()
+            } else {
+                let file_cmd = ExecCommand::new(["test", "-s", path]);
+                let mut file_res = container
+                    .exec(file_cmd)
+                    .await
+                    .expect("test -s exec should succeed");
+                let _ = file_res.stdout_to_vec().await;
+                file_res
+                    .exit_code()
+                    .await
+                    .expect("exit code should be available")
+                    == Some(0)
+            }
+        } else {
+            self.ensure_local_host_for_fs();
+            let p = std::path::Path::new(path);
+            if !p.exists() {
+                return false;
+            }
+            if p.is_dir() {
+                std::fs::read_dir(p)
+                    .map(|mut entries| entries.next().is_some())
+                    .unwrap_or(false)
+            } else {
+                std::fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
+            }
+        }
+    }
+}
+
 /// Containers are used unless PGMONETA_MCP_USE_TESTCONTAINERS is 0/false/no/off.
 fn use_testcontainers() -> bool {
     std::env::var("PGMONETA_MCP_USE_TESTCONTAINERS")
