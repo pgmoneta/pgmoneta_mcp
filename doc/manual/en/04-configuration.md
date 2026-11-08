@@ -123,7 +123,7 @@ port is separate and should match pgmoneta's Prometheus metrics endpoint.
 
 This optional section configures the local LLM integration for AI-powered
 backup management. See the **Local LLM** chapter or
-[LOCAL_LLM.md](../LOCAL_LLM.md) for detailed setup instructions.
+[LOCAL_LLM.md](../../LOCAL_LLM.md) for detailed setup instructions.
 
 | Property | Default | Unit | Required | Description |
 | :------- | :------ | :--- | :------- | :---------- |
