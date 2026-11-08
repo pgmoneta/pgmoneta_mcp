@@ -31,7 +31,7 @@ The other section, called `[pgmoneta]`, is where you configure connection with `
 ## [llm]
 
 Optional. Configures the local LLM integration for AI-powered backup management.
-See the manual or [LOCAL_LLM.md](../LOCAL_LLM.md) for detailed setup instructions.
+See the manual or [LOCAL_LLM.md](LOCAL_LLM.md) for detailed setup instructions.
 
 | Property | Default | Unit | Required | Description |
 | :------- | :------ | :--- | :------- | :---------- |
