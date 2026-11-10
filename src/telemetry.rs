@@ -231,4 +231,59 @@ mod tests {
         assert!(encoded.contains("pgmoneta_mcp_pgmoneta_metrics_scrapes_total"));
         assert!(encoded.contains("outcome=\"200\""));
     }
+
+    #[test]
+    fn test_in_flight_guard_increments_and_decrements() {
+        let metrics = Arc::new(Metrics::new());
+        assert_eq!(metrics.http_requests_in_flight.get(), 0);
+
+        metrics.increment_http_requests_in_flight();
+        assert_eq!(metrics.http_requests_in_flight.get(), 1);
+
+        {
+            let _guard = InFlightGuard::new(Arc::clone(&metrics));
+        }
+        assert_eq!(metrics.http_requests_in_flight.get(), 0);
+    }
+
+    #[test]
+    fn test_metrics_records_multiple_status_codes_and_methods() {
+        let metrics = Metrics::new();
+        metrics.record_http_request(
+            "POST",
+            "/mcp",
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Duration::from_millis(100),
+        );
+        metrics.record_http_request(
+            "GET",
+            "/metrics",
+            StatusCode::NOT_FOUND,
+            Duration::from_millis(5),
+        );
+        metrics.record_pgmoneta_metrics_scrape("request_error", Duration::from_millis(50));
+
+        let encoded = metrics.encode().unwrap();
+        assert!(encoded.contains("method=\"POST\""));
+        assert!(encoded.contains("status=\"500\""));
+        assert!(encoded.contains("method=\"GET\""));
+        assert!(encoded.contains("status=\"404\""));
+        assert!(encoded.contains("outcome=\"request_error\""));
+    }
+
+    #[tokio::test]
+    async fn test_metrics_handler_response() {
+        let metrics = Arc::new(Metrics::new());
+        metrics.record_http_request("GET", "/mcp", StatusCode::OK, Duration::from_millis(10));
+
+        let response = metrics_handler(State(metrics))
+            .await
+            .unwrap()
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).unwrap(),
+            "application/openmetrics-text; version=1.0.0; charset=utf-8"
+        );
+    }
 }

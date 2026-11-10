@@ -265,13 +265,33 @@ fn parse_metric_sample(line: &str) -> Result<MetricSample> {
     })
 }
 
-fn split_metric_sample_line(line: &str) -> Result<(&str, &str)> {
+pub fn split_metric_sample_line(line: &str) -> Result<(&str, &str)> {
     let mut in_braces = false;
+    let mut in_quotes = false;
+    let mut escaped = false;
 
     for (idx, ch) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
         match ch {
-            '{' => in_braces = true,
-            '}' => in_braces = false,
+            '\\' if in_quotes => {
+                escaped = true;
+            }
+            '"' if in_braces => {
+                in_quotes = !in_quotes;
+            }
+            '"' => {
+                bail!("Invalid metric sample '{}'", line);
+            }
+            '{' if !in_quotes => {
+                in_braces = true;
+            }
+            '}' if !in_quotes => {
+                in_braces = false;
+            }
             ch if ch.is_whitespace() && !in_braces => {
                 let identifier = line[..idx].trim();
                 let value = line[idx..].trim();
@@ -341,6 +361,7 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
         idx += 1;
 
         let mut value = String::new();
+        let mut closed = false;
         while idx < input.len() {
             match input.as_bytes()[idx] {
                 b'\\' => {
@@ -359,6 +380,7 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
                 }
                 b'"' => {
                     idx += 1;
+                    closed = true;
                     break;
                 }
                 _ => {
@@ -370,6 +392,10 @@ fn parse_metric_attribute_set(input: &str) -> Result<HashMap<String, String>> {
                     idx += ch.len_utf8();
                 }
             }
+        }
+
+        if !closed {
+            bail!("Invalid metric label set '{}'", input);
         }
 
         attributes.insert(key.to_string(), value);
@@ -537,5 +563,162 @@ mod tests {
                 ("quote".to_string(), "a\"b".to_string()),
             ])
         );
+    }
+
+    #[test]
+    fn test_parse_metric_sample_label_with_braces() {
+        let sample = parse_metric_sample(r#"pgmoneta_query{q="select {x} from t"} 7"#).unwrap();
+        assert_eq!(sample.value, "7");
+        assert_eq!(
+            sample.attributes.get("q").map(String::as_str),
+            Some("select {x} from t")
+        );
+    }
+
+    #[test]
+    fn test_parse_metric_sample_escaped_quote_and_brace() {
+        let sample = parse_metric_sample(r#"m{q="a\"} b"} 3"#).unwrap();
+        assert_eq!(sample.value, "3");
+        assert_eq!(
+            sample.attributes.get("q").map(String::as_str),
+            Some(r#"a"} b"#)
+        );
+    }
+
+    #[test]
+    fn test_parse_metric_sample_stray_quote_outside_braces() {
+        assert!(parse_metric_sample(r#"pgmoneta" 1"#).is_err());
+    }
+
+    #[test]
+    fn test_parse_metric_sample_unterminated_quote() {
+        let result = parse_metric_sample(r#"pgmoneta_query{q="unterminated} 7"#);
+        assert!(
+            result.is_err(),
+            "unterminated quote must be an error and must not yield value 7"
+        );
+    }
+
+    #[test]
+    fn test_parse_metric_sample_regression_guards() {
+        let sample1 = parse_metric_sample("up 1").unwrap();
+        assert_eq!(sample1.value, "1");
+
+        let sample2 = parse_metric_sample("up 1 1700000000").unwrap();
+        assert_eq!(sample2.value, "1");
+    }
+
+    #[test]
+    fn test_parse_metric_attribute_set_unclosed_quote() {
+        assert!(parse_metric_attribute_set(r#"q="abc"#).is_err());
+    }
+
+    #[test]
+    fn test_normalize_metric_request_accepts_labels() {
+        let query = normalize_metric_request(MetricRequest {
+            username: "admin".to_string(),
+            name: "pgmoneta_up".to_string(),
+            attributes: HashMap::new(),
+            labels: HashMap::from([("server".to_string(), Value::String("primary".to_string()))]),
+        })
+        .unwrap();
+
+        assert_eq!(
+            query.metric.attributes.get("server").map(String::as_str),
+            Some("primary")
+        );
+    }
+
+    #[test]
+    fn test_normalize_metric_request_rejects_empty_name() {
+        let err = normalize_metric_request(MetricRequest {
+            username: "admin".to_string(),
+            name: "   ".to_string(),
+            attributes: HashMap::new(),
+            labels: HashMap::new(),
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("requires a non-empty 'name'"));
+    }
+
+    #[test]
+    fn test_normalize_metric_request_rejects_null_attribute() {
+        let err = normalize_metric_request(MetricRequest {
+            username: "admin".to_string(),
+            name: "pgmoneta_up".to_string(),
+            attributes: HashMap::from([("server".to_string(), Value::Null)]),
+            labels: HashMap::new(),
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("must not be null"));
+    }
+
+    #[test]
+    fn test_normalize_metric_request_rejects_nested_attribute() {
+        let err = normalize_metric_request(MetricRequest {
+            username: "admin".to_string(),
+            name: "pgmoneta_up".to_string(),
+            attributes: HashMap::from([(
+                "server".to_string(),
+                Value::Array(vec![Value::String("primary".to_string())]),
+            )]),
+            labels: HashMap::new(),
+        })
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("must be a string, number, or boolean")
+        );
+    }
+
+    #[test]
+    fn test_find_metric_value_not_found() {
+        let metrics = "pgmoneta_up 1\n";
+        let err = find_metric_value(
+            metrics,
+            &MetricQuery {
+                name: "pgmoneta_version".to_string(),
+                attributes: HashMap::new(),
+            },
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("was not found"));
+    }
+
+    #[test]
+    fn test_find_metric_value_attributes_mismatch() {
+        let metrics = r#"pgmoneta_backup_total{server="primary"} 5"#;
+        let err = find_metric_value(
+            metrics,
+            &MetricQuery {
+                name: "pgmoneta_backup_total".to_string(),
+                attributes: HashMap::from([("server".to_string(), "replica".to_string())]),
+            },
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("did not match"));
+    }
+
+    #[test]
+    fn test_parse_metric_sample_with_timestamp_and_labels() {
+        let sample =
+            parse_metric_sample(r#"pgmoneta_backup_total{server="primary"} 5 1715000000000"#)
+                .unwrap();
+        assert_eq!(sample.name, "pgmoneta_backup_total");
+        assert_eq!(sample.value, "5");
+        assert_eq!(
+            sample.attributes.get("server").map(String::as_str),
+            Some("primary")
+        );
+    }
+
+    #[test]
+    fn test_parse_metric_attribute_set_rejects_unsupported_escape() {
+        assert!(parse_metric_attribute_set(r#"q="a\tb""#).is_err());
     }
 }
