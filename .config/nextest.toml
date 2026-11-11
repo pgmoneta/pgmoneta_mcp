@@ -1,0 +1,22 @@
+# Copyright (C) 2026 The pgmoneta community
+#
+# Repository config for cargo-nextest.
+# See https://nexte.st/docs/configuration/
+
+[profile.default]
+# Keep default nextest behavior for ad-hoc local runs.
+
+[profile.unit]
+# Library/unit tests can run in parallel.
+fail-fast = false
+
+[profile.integration]
+# Match the previous cargo test --test-threads=1 behavior used by check.sh.
+# Integration tests share pgmoneta state / fixtures and are not safe to parallelize.
+fail-fast = false
+test-threads = 1
+
+[profile.ci]
+# Used by GitHub Actions and the Rocky full-test path.
+fail-fast = false
+test-threads = 1

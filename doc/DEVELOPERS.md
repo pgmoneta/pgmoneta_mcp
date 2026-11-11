@@ -134,6 +134,13 @@ bash test/check.sh integration -m info_test
 
 ### Direct Cargo commands
 
+Prefer nextest when available (repository config lives in `.config/nextest.toml`):
+
+```bash
+cargo nextest run --profile unit -E 'kind(lib)'
+cargo nextest run --profile integration --run-ignored all -E 'kind(test)'
+```
+
 You can still run Cargo directly:
 
 ```bash
@@ -141,6 +148,9 @@ cargo test
 cargo test -- --nocapture
 cargo test <pattern>
 ```
+
+`test/check.sh` uses nextest automatically when `cargo nextest` is on `PATH`,
+and falls back to `cargo test` otherwise.
 
 ---
 

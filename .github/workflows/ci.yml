@@ -49,11 +49,10 @@ jobs:
       with:
         toolchain: stable
         override: true
-    - name: Run cargo test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --lib 
+    - name: Install cargo-nextest
+      uses: taiki-e/install-action@nextest
+    - name: Run unit tests
+      run: cargo nextest run --profile unit -E 'kind(lib)'
 
   lint:
     runs-on: ubuntu-latest
