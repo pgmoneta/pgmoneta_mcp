@@ -89,7 +89,9 @@ const SLASH_COMMANDS: &[&str] = &[
 ];
 const NATURAL_LANGUAGE_SYSTEM_PROMPT: &str = "\
 You translate user requests into pgmoneta MCP tool invocations. \
-Always select the single best matching tool from the provided tool list and respond with a tool call instead of plain text. \
+Always respond with tool calls from the provided tool list instead of plain text. \
+If the request asks for a single operation, select the single best matching tool. \
+If the request asks for several operations, return one tool call per operation, in the order the user asked for them. \
 Use arguments that are explicitly provided by the user and match the tool schema. \
 Do not invent values. Omit optional arguments when the user did not specify them. \
 If the user mentions a pgmoneta server name such as primary or standby, pass it through the tool's `server` argument.";
@@ -169,6 +171,13 @@ enum ClientCommand {
         args: HashMap<String, Value>,
     },
     NaturalLanguage(String),
+}
+
+/// A tool invocation selected by the LLM for a natural-language request.
+#[derive(Debug, Clone, PartialEq)]
+struct PlannedToolCall {
+    name: String,
+    args: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -920,18 +929,20 @@ fn run_repl(
                     ),
                     Ok(ClientCommand::Tools) => println!("{}", format_tools(&tools)),
                     Ok(ClientCommand::Exit) => break,
-                    Ok(ClientCommand::ToolCall { name, args }) => execute_tool_command(
-                        runtime,
-                        active_client,
-                        &mut editor,
-                        &tools,
-                        defaults,
-                        mode,
-                        name,
-                        args,
-                        None,
-                        None,
-                    )?,
+                    Ok(ClientCommand::ToolCall { name, args }) => {
+                        execute_tool_command(
+                            runtime,
+                            active_client,
+                            &mut editor,
+                            &tools,
+                            defaults,
+                            mode,
+                            name,
+                            args,
+                            None,
+                            None,
+                        )?;
+                    }
                     Ok(ClientCommand::NaturalLanguage(request)) => {
                         let Some(llm) = active_model.as_ref().and_then(|name| llms.get(name))
                         else {
@@ -945,21 +956,48 @@ fn run_repl(
                         match runtime
                             .block_on(translate_natural_language(llm, &llm_tools, &request))
                         {
-                            Ok(ClientCommand::ToolCall { name, args }) => execute_tool_command(
-                                runtime,
-                                active_client,
-                                &mut editor,
-                                &tools,
-                                defaults,
-                                mode,
-                                name,
-                                args,
-                                Some(&request),
-                                Some(llm),
-                            )?,
-                            Ok(_) => unreachable!(
-                                "natural-language translation must resolve to a tool call"
-                            ),
+                            Ok(tool_calls) => {
+                                let total = tool_calls.len();
+                                for (index, tool_call) in tool_calls.into_iter().enumerate() {
+                                    if total > 1 {
+                                        println!(
+                                            "{}",
+                                            format_tool_step_header(
+                                                index + 1,
+                                                total,
+                                                &tool_call.name
+                                            )
+                                        );
+                                    }
+                                    let step_request = if total > 1 {
+                                        format_step_request(index + 1, total, &tool_call.name)
+                                    } else {
+                                        request.clone()
+                                    };
+
+                                    let succeeded = execute_tool_command(
+                                        runtime,
+                                        active_client,
+                                        &mut editor,
+                                        &tools,
+                                        defaults,
+                                        mode,
+                                        tool_call.name,
+                                        tool_call.args,
+                                        Some(&step_request),
+                                        Some(llm),
+                                    )?;
+                                    if !succeeded {
+                                        if index + 1 < total {
+                                            eprintln!(
+                                                "{}",
+                                                format_skipped_steps_message(index + 1, total)
+                                            );
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
                             Err(error) => eprintln!("{}", format_runtime_error(&error)),
                         }
                     }
@@ -1156,6 +1194,34 @@ fn format_metric_tool_result_developer(result: &CallToolResult) -> Result<String
     Ok(text)
 }
 
+/// Returns true when a tool call reached the server but the operation itself failed:
+/// either the MCP result is flagged as an error, or pgmoneta reported `Outcome.Status: false`.
+fn tool_result_failed(result: &CallToolResult) -> bool {
+    if result.is_error == Some(true) {
+        return true;
+    }
+
+    let value = match &result.structured_content {
+        Some(structured) => structured.clone(),
+        None => match extract_text_content(result)
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        {
+            Some(value) => value,
+            None => return false,
+        },
+    };
+
+    // Some responses wrap the JSON object in a JSON string; unwrap one level.
+    let value = match value {
+        Value::String(inner) => match serde_json::from_str::<Value>(&inner) {
+            Ok(value) => value,
+            Err(_) => return false,
+        },
+        other => other,
+    };
+
+    value.pointer("/Outcome/Status").and_then(Value::as_bool) == Some(false)
+}
 fn extract_text_content(result: &CallToolResult) -> Option<String> {
     let mut texts = Vec::with_capacity(result.content.len());
 
@@ -1472,7 +1538,7 @@ fn execute_tool_command(
     args: HashMap<String, Value>,
     natural_language_request: Option<&str>,
     response_llm: Option<&OpenAiClient>,
-) -> Result<()> {
+) -> Result<bool> {
     let tool = tools
         .iter()
         .find(|tool| tool.name == name)
@@ -1487,21 +1553,24 @@ fn execute_tool_command(
         let missing = missing_required_arguments(&tool.input_schema, &args);
         if !missing.is_empty() {
             println!("{}", format_missing_required_arguments(&missing));
-            return Ok(());
+            return Ok(false);
         }
     }
 
     match runtime.block_on(client.call_tool(name.clone(), args)) {
-        Ok(result) => match mode {
-            ClientMode::User => {
-                let base_output = if name == "metric" {
-                    format_metric_tool_result(&result)?
-                } else {
-                    format_tool_result(&result)?
-                };
+        Ok(result) => {
+            let failed = tool_result_failed(&result);
+            match mode {
+                ClientMode::User => {
+                    let base_output = if name == "metric" {
+                        format_metric_tool_result(&result)?
+                    } else {
+                        format_tool_result(&result)?
+                    };
 
-                let output =
-                    if let (Some(request), Some(llm)) = (natural_language_request, response_llm) {
+                    let output = if let (Some(request), Some(llm)) =
+                        (natural_language_request, response_llm)
+                    {
                         let tool_description = tool
                             .description
                             .as_ref()
@@ -1520,21 +1589,42 @@ fn execute_tool_command(
                     } else {
                         base_output
                     };
-                let output = ensure_user_mode_markdown_output(&output)?;
-                println!("{}", markdown::render_markdown_for_console(&output));
-            }
-            ClientMode::Developer => {
-                if name == "metric" {
-                    println!("{}", format_metric_tool_result_developer(&result)?);
-                } else {
-                    println!("{}", format_tool_result_developer(&result)?);
+                    let output = ensure_user_mode_markdown_output(&output)?;
+                    println!("{}", markdown::render_markdown_for_console(&output));
+                }
+                ClientMode::Developer => {
+                    if name == "metric" {
+                        println!("{}", format_metric_tool_result_developer(&result)?);
+                    } else {
+                        println!("{}", format_tool_result_developer(&result)?);
+                    }
                 }
             }
-        },
-        Err(error) => eprintln!("{}", format_runtime_error(&error)),
+            if failed {
+                return Ok(false);
+            }
+        }
+        Err(error) => {
+            eprintln!("{}", format_runtime_error(&error));
+            return Ok(false);
+        }
     }
 
-    Ok(())
+    Ok(true)
+}
+
+fn format_tool_step_header(step: usize, total: usize, tool_name: &str) -> String {
+    format!("Step {step}/{total}: {tool_name}")
+}
+
+fn format_skipped_steps_message(failed_step: usize, total: usize) -> String {
+    let skipped = total - failed_step;
+    let noun = if skipped == 1 { "step" } else { "steps" };
+    format!("Step {failed_step}/{total} failed, skipping the remaining {skipped} {noun}.")
+}
+
+fn format_step_request(step: usize, total: usize, tool_name: &str) -> String {
+    format!("Step {step} of {total} of a multi-step request: ran the {tool_name} tool.")
 }
 
 async fn postprocess_tool_output_markdown<T: LlmClient>(
@@ -2022,24 +2112,40 @@ async fn translate_natural_language<L: LlmClient>(
     llm: &L,
     tools: &[ToolDefinition],
     input: &str,
-) -> Result<ClientCommand> {
+) -> Result<Vec<PlannedToolCall>> {
     let messages = [
         ChatMessage::system(NATURAL_LANGUAGE_SYSTEM_PROMPT),
         ChatMessage::user(input),
     ];
 
     match llm.chat(&messages, tools).await? {
-        LlmResponse::ToolCalls(tool_calls) => match tool_calls.as_slice() {
-            [tool_call] => Ok(ClientCommand::ToolCall {
-                name: tool_call.function.name.clone(),
-                args: tool_call.function.arguments.clone(),
-            }),
-            [] => Err(anyhow!("LLM did not return a tool call for '{}'", input)),
-            _ => Err(anyhow!(
-                "LLM returned multiple tool calls for '{}'. Please be more specific.",
-                input
-            )),
-        },
+        LlmResponse::ToolCalls(tool_calls) => {
+            if tool_calls.is_empty() {
+                return Err(anyhow!("LLM did not return a tool call for '{}'", input));
+            }
+
+            // Validate every tool name before anything is executed, so a bad
+            // call later in the list cannot leave the earlier calls half-applied.
+            if let Some(unknown) = tool_calls.iter().find(|tool_call| {
+                !tools
+                    .iter()
+                    .any(|tool| tool.function.name == tool_call.function.name)
+            }) {
+                return Err(anyhow!(
+                    "LLM selected unknown tool '{}' for '{}'. Use /tools to list tools.",
+                    unknown.function.name,
+                    input
+                ));
+            }
+
+            Ok(tool_calls
+                .into_iter()
+                .map(|tool_call| PlannedToolCall {
+                    name: tool_call.function.name,
+                    args: tool_call.function.arguments,
+                })
+                .collect())
+        }
         LlmResponse::Text(text) => {
             let detail = text.trim();
             if detail.is_empty() {
@@ -3488,10 +3594,10 @@ mod tests {
 
         assert_eq!(
             command,
-            ClientCommand::ToolCall {
+            vec![PlannedToolCall {
                 name: "list_backups".to_string(),
                 args: HashMap::from([("server".to_string(), json!("primary"))]),
-            }
+            }]
         );
     }
 
@@ -3500,7 +3606,7 @@ mod tests {
         let llm = MockLlm {
             response: LlmResponse::ToolCalls(vec![pgmoneta_mcp::llm::ToolCall {
                 function: pgmoneta_mcp::llm::ToolCallFunction {
-                    name: "backup_server".to_string(),
+                    name: "backup".to_string(),
                     arguments: HashMap::from([("server".to_string(), json!("primary"))]),
                 },
             }]),
@@ -3516,10 +3622,166 @@ mod tests {
 
         assert_eq!(
             command,
-            ClientCommand::ToolCall {
-                name: "backup_server".to_string(),
+            vec![PlannedToolCall {
+                name: "backup".to_string(),
                 args: HashMap::from([("server".to_string(), json!("primary"))]),
-            }
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_translate_natural_language_returns_multiple_tool_calls_in_order() {
+        let llm = MockLlm {
+            response: LlmResponse::ToolCalls(vec![
+                pgmoneta_mcp::llm::ToolCall {
+                    function: pgmoneta_mcp::llm::ToolCallFunction {
+                        name: "backup".to_string(),
+                        arguments: HashMap::from([("server".to_string(), json!("primary"))]),
+                    },
+                },
+                pgmoneta_mcp::llm::ToolCall {
+                    function: pgmoneta_mcp::llm::ToolCallFunction {
+                        name: "list_backups".to_string(),
+                        arguments: HashMap::from([("server".to_string(), json!("primary"))]),
+                    },
+                },
+            ]),
+        };
+
+        let command = translate_natural_language(
+            &llm,
+            &[
+                sample_llm_tool_definition(),
+                sample_backup_tool_definition(),
+            ],
+            "Backup primary server, then list its backups",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            command,
+            vec![
+                PlannedToolCall {
+                    name: "backup".to_string(),
+                    args: HashMap::from([("server".to_string(), json!("primary"))]),
+                },
+                PlannedToolCall {
+                    name: "list_backups".to_string(),
+                    args: HashMap::from([("server".to_string(), json!("primary"))]),
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_translate_natural_language_rejects_unknown_tool_in_multiple_calls() {
+        let llm = MockLlm {
+            response: LlmResponse::ToolCalls(vec![
+                pgmoneta_mcp::llm::ToolCall {
+                    function: pgmoneta_mcp::llm::ToolCallFunction {
+                        name: "list_backups".to_string(),
+                        arguments: HashMap::from([("server".to_string(), json!("primary"))]),
+                    },
+                },
+                pgmoneta_mcp::llm::ToolCall {
+                    function: pgmoneta_mcp::llm::ToolCallFunction {
+                        name: "does_not_exist".to_string(),
+                        arguments: HashMap::new(),
+                    },
+                },
+            ]),
+        };
+
+        let err = translate_natural_language(
+            &llm,
+            &[sample_llm_tool_definition()],
+            "List backups on primary, then do something unknown",
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("unknown tool 'does_not_exist'"));
+    }
+
+    #[tokio::test]
+    async fn test_translate_natural_language_rejects_empty_tool_calls() {
+        let llm = MockLlm {
+            response: LlmResponse::ToolCalls(vec![]),
+        };
+
+        let err = translate_natural_language(
+            &llm,
+            &[sample_llm_tool_definition()],
+            "List backups on primary server",
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("did not return a tool call"));
+    }
+
+    #[test]
+    fn test_format_tool_step_header() {
+        assert_eq!(
+            format_tool_step_header(2, 3, "annotate_backup"),
+            "Step 2/3: annotate_backup"
+        );
+    }
+
+    #[test]
+    fn test_format_step_request_mentions_only_current_step() {
+        let prompt = format_step_request(1, 2, "annotate_backup");
+
+        assert_eq!(
+            prompt,
+            "Step 1 of 2 of a multi-step request: ran the annotate_backup tool."
+        );
+    }
+
+    #[test]
+    fn test_tool_result_failed_detects_pgmoneta_outcome_failure() {
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{"Header":{"Command":"list-backup"},"Outcome":{"Error":"List backup: no server","Status":false,"Workflow":"main"},"Response":{"Server":"nosuchserver"}}"#,
+        )]);
+
+        assert!(tool_result_failed(&result));
+    }
+
+    #[test]
+    fn test_tool_result_failed_accepts_successful_outcome() {
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#"{"Outcome":{"Status":true},"Response":{"Server":"primary"}}"#,
+        )]);
+
+        assert!(!tool_result_failed(&result));
+    }
+
+    #[test]
+    fn test_tool_result_failed_unwraps_nested_json_string() {
+        let result = CallToolResult::success(vec![ContentBlock::text(
+            r#""{\"Outcome\":{\"Status\":false}}""#,
+        )]);
+
+        assert!(tool_result_failed(&result));
+    }
+
+    #[test]
+    fn test_tool_result_failed_ignores_plain_text() {
+        let result = CallToolResult::success(vec![ContentBlock::text("pong")]);
+
+        assert!(!tool_result_failed(&result));
+    }
+
+    #[test]
+    fn test_format_skipped_steps_message() {
+        assert_eq!(
+            format_skipped_steps_message(1, 3),
+            "Step 1/3 failed, skipping the remaining 2 steps."
+        );
+        assert_eq!(
+            format_skipped_steps_message(2, 3),
+            "Step 2/3 failed, skipping the remaining 1 step."
         );
     }
 
