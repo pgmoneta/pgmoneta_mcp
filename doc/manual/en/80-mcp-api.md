@@ -745,8 +745,8 @@ path = /tmp/pgmoneta-mcp.log
 
 **pgmoneta-mcp-users.conf**:
 ```ini
-[admin]
-password = <encrypted_password_base64>
+[pgmoneta-mcp-users]
+admin = <encrypted_password_base64>
 ```
 
 See [CONFIGURATION.md](../CONFIGURATION.md) for complete details.

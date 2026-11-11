@@ -136,12 +136,12 @@ When `[llm]` is present, `endpoint` and `model` must not be empty.
 ## Users configuration
 
 `pgmoneta-mcp-users.conf` stores encrypted passwords for pgmoneta admin users.
-The server and native client expect an `[admins]` section.
+The server and native client expect a `[pgmoneta-mcp-users]` section.
 
 Example shape:
 
 ``` ini
-[admins]
+[pgmoneta-mcp-users]
 admin = <encrypted-password>
 operator = <encrypted-password>
 ```
