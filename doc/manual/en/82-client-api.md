@@ -656,8 +656,8 @@ port = 2345
 
 `pgmoneta-mcp-users.conf`:
 ```ini
-[admin]
-password = <encrypted_password_base64>
+[pgmoneta-mcp-users]
+admin = <encrypted_password_base64>
 ```
 
 **Performance Considerations**

@@ -14,7 +14,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use super::constant::{LogLevel, LogType};
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use config::{Config, FileFormat};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -29,8 +29,46 @@ pub static CONFIG: OnceCell<Configuration> = OnceCell::new();
 
 /// Type alias representing the parsed user configuration.
 ///
-/// Maps a section name (e.g., username) to a dictionary of properties (e.g., password).
+/// Maps a section name to a dictionary of properties (e.g., username to encrypted password).
 pub type UserConf = HashMap<String, HashMap<String, String>>;
+
+pub const USER_SECTION: &str = "pgmoneta-mcp-users";
+pub const USER_SECTION_HYPHEN: &str = USER_SECTION;
+pub const DEFAULT_USER_SECTION: &str = USER_SECTION;
+
+pub fn is_valid_user_section(section: &str) -> bool {
+    section == USER_SECTION
+}
+
+pub fn validate_user_configuration(conf: &UserConf) -> anyhow::Result<()> {
+    for section in conf.keys() {
+        if !is_valid_user_section(section) {
+            bail!(
+                "Invalid section header '[{}]' in users configuration. Expected '[{}]'",
+                section,
+                USER_SECTION
+            );
+        }
+    }
+
+    Ok(())
+}
+
+pub fn get_user_section_name(conf: &UserConf) -> Option<&str> {
+    if conf.contains_key(USER_SECTION) {
+        Some(USER_SECTION)
+    } else {
+        None
+    }
+}
+
+pub fn get_users(conf: &UserConf) -> Option<&HashMap<String, String>> {
+    conf.get(USER_SECTION)
+}
+
+pub fn get_users_mut(conf: &mut UserConf) -> Option<&mut HashMap<String, String>> {
+    conf.get_mut(USER_SECTION)
+}
 
 /// The root configuration structure containing all application settings.
 ///
@@ -40,10 +78,12 @@ pub type UserConf = HashMap<String, HashMap<String, String>>;
 #[derive(Clone, Debug, Deserialize)]
 pub struct Configuration {
     /// The overall properties of the MCP server.
+    #[serde(alias = "pgmoneta-mcp")]
     pub pgmoneta_mcp: PgmonetaMcpConfiguration,
     /// Settings to configure the connection with the remote `pgmoneta` server.
     pub pgmoneta: PgmonetaConfiguration,
     /// Parsed admin users mapping (username -> password).
+    #[serde(default)]
     pub admins: HashMap<String, String>,
     /// Optional configuration for the local LLM integration.
     pub llm: Option<LlmConfiguration>,
@@ -195,16 +235,26 @@ struct ClientConfRoot {
 pub fn load_configuration(config_path: &str, user_path: &str) -> anyhow::Result<Configuration> {
     let conf = Config::builder()
         .add_source(config::File::with_name(config_path).format(FileFormat::Ini))
-        .add_source(config::File::with_name(user_path).format(FileFormat::Ini))
         .build()?;
-    let conf = conf.try_deserialize::<Configuration>().map_err(|e| {
+    let mut conf = conf.try_deserialize::<Configuration>().map_err(|e| {
         anyhow!(
-            "Error parsing configuration at path {}, user {}: {:?}",
+            "Error parsing configuration at path {}: {:?}",
             config_path,
-            user_path,
             e
         )
     })?;
+
+    let user_conf = load_user_configuration(user_path)?;
+    if let Some(users) = get_users(&user_conf) {
+        conf.admins = users.clone();
+    } else {
+        bail!(
+            "Missing user configuration section in '{}'. Expected '[{}]'",
+            user_path,
+            USER_SECTION
+        );
+    }
+
     normalize_configuration(conf)
 }
 
@@ -221,13 +271,15 @@ pub fn load_user_configuration(user_path: &str) -> anyhow::Result<UserConf> {
     let conf = Config::builder()
         .add_source(config::File::with_name(user_path).format(FileFormat::Ini))
         .build()?;
-    conf.try_deserialize::<UserConf>().map_err(|e| {
+    let user_conf = conf.try_deserialize::<UserConf>().map_err(|e| {
         anyhow!(
             "Error parsing user configuration at path {}: {:?}",
             user_path,
             e
         )
-    })
+    })?;
+    validate_user_configuration(&user_conf)?;
+    Ok(user_conf)
 }
 
 /// Loads only the inspector configuration from the specified file path.
@@ -527,7 +579,11 @@ mod tests {
             "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\n"
         )
         .unwrap();
-        writeln!(user_file, "[admins]\nadmin = encrypted-password\n").unwrap();
+        writeln!(
+            user_file,
+            "[pgmoneta-mcp-users]\nadmin = encrypted-password\n"
+        )
+        .unwrap();
 
         let conf = load_configuration(
             config_file.path().to_str().unwrap(),
@@ -536,6 +592,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(conf.pgmoneta.metrics, 5001);
+        assert_eq!(
+            conf.admins.get("admin").map(String::as_str),
+            Some("encrypted-password")
+        );
     }
 
     #[test]
@@ -548,7 +608,11 @@ mod tests {
             "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\nmetrics = 7001\n"
         )
         .unwrap();
-        writeln!(user_file, "[admins]\nadmin = encrypted-password\n").unwrap();
+        writeln!(
+            user_file,
+            "[pgmoneta-mcp-users]\nadmin = encrypted-password\n"
+        )
+        .unwrap();
 
         let conf = load_configuration(
             config_file.path().to_str().unwrap(),
@@ -557,5 +621,52 @@ mod tests {
         .unwrap();
 
         assert_eq!(conf.pgmoneta.metrics, 7001);
+    }
+
+    #[test]
+    fn test_load_user_configuration_accepts_valid_header() {
+        let mut hyphen_file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(hyphen_file, "[pgmoneta-mcp-users]\nu1 = p1\n").unwrap();
+        let hyphen_conf = load_user_configuration(hyphen_file.path().to_str().unwrap()).unwrap();
+        assert_eq!(
+            get_users(&hyphen_conf)
+                .unwrap()
+                .get("u1")
+                .map(String::as_str),
+            Some("p1")
+        );
+    }
+
+    #[test]
+    fn test_load_user_configuration_rejects_underscore_header() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "[pgmoneta_mcp_users]\nadmin = pass\n").unwrap();
+
+        let err = load_user_configuration(file.path().to_str().unwrap()).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Invalid section header '[pgmoneta_mcp_users]'")
+        );
+    }
+
+    #[test]
+    fn test_load_user_configuration_rejects_admins_header() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "[admins]\nadmin = pass\n").unwrap();
+
+        let err = load_user_configuration(file.path().to_str().unwrap()).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Invalid section header '[admins]'")
+        );
+    }
+
+    #[test]
+    fn test_load_user_configuration_rejects_arbitrary_header() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "[users]\nadmin = pass\n").unwrap();
+
+        let err = load_user_configuration(file.path().to_str().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("Invalid section header '[users]'"));
     }
 }

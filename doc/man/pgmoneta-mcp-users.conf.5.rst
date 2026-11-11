@@ -14,7 +14,7 @@ DESCRIPTION
 pgmoneta-mcp-users.conf is the users configuration file for pgmoneta-mcp.
 
 The file is split into different sections specified by the ``[`` and ``]`` characters. 
-Users are defined in the ``[users]`` section.
+Users are defined in the ``[pgmoneta-mcp-users]`` section.
 
 The format is:
 

@@ -128,7 +128,7 @@ chmod 600 ~/.pgmoneta-mcp/master.key
 ### 2. Add a user
 
 The RPM ships a placeholder user configuration file. Remove it first so that the admin tool
-can create a fresh one with the required `[admins]` section:
+can create a fresh one with the required `[pgmoneta-mcp-users]` section:
 
 ```
 sudo rm /etc/pgmoneta-mcp/pgmoneta-mcp-users.conf
@@ -141,7 +141,7 @@ must match the ones registered with pgmoneta via `pgmoneta-admin`.
 pgmoneta-mcp-admin user -U <username> -f /etc/pgmoneta-mcp/pgmoneta-mcp-users.conf add -P <password>
 ```
 
-This creates the user configuration file with the required `[admins]` section. You can run this
+This creates the user configuration file with the required `[pgmoneta-mcp-users]` section. You can run this
 command again to update an existing user's password.
 
 ### 3. Configure the server

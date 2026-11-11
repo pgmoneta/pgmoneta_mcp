@@ -1445,11 +1445,10 @@ fn parse_json_args(raw_args: &str) -> Result<HashMap<String, Value>> {
 
 fn select_username(users_path: &str) -> Result<String> {
     let conf = configuration::load_user_configuration(users_path)?;
-    let admins = conf
-        .get("admins")
-        .ok_or_else(|| anyhow!("Unable to find admins section in user configuration"))?;
+    let users = configuration::get_users(&conf)
+        .ok_or_else(|| anyhow!("Unable to find users section in user configuration"))?;
 
-    let mut usernames: Vec<String> = admins.keys().cloned().collect();
+    let mut usernames: Vec<String> = users.keys().cloned().collect();
     usernames.sort();
 
     match usernames.len() {

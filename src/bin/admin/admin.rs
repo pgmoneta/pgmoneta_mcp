@@ -138,17 +138,17 @@ impl User {
             conf = HashMap::new();
             let mut user_conf: HashMap<String, String> = HashMap::new();
             user_conf.insert(user.to_string(), password_str);
-            conf.insert("admins".to_string(), user_conf);
+            conf.insert(configuration::DEFAULT_USER_SECTION.to_string(), user_conf);
         } else {
             conf = configuration::load_user_configuration(file)?;
-            if let Some(user_conf) = conf.get_mut("admins") {
-                if user_conf.contains_key(user) {
-                    return Err(anyhow!("User '{}' already exists", user));
-                }
-                user_conf.insert(user.to_string(), password_str);
-            } else {
-                return Err(anyhow!("Unable to find admins in user configuration"));
+            let section = configuration::get_user_section_name(&conf)
+                .unwrap_or(configuration::DEFAULT_USER_SECTION)
+                .to_string();
+            let user_conf = conf.entry(section).or_default();
+            if user_conf.contains_key(user) {
+                return Err(anyhow!("User '{}' already exists", user));
             }
+            user_conf.insert(user.to_string(), password_str);
         }
 
         if let Some(parent) = path.parent() {
@@ -177,13 +177,13 @@ impl User {
 
         let mut conf = configuration::load_user_configuration(file)?;
 
-        if let Some(user_conf) = conf.get_mut("admins") {
+        if let Some(user_conf) = configuration::get_users_mut(&mut conf) {
             if user_conf.remove(user).is_none() {
                 return Err(anyhow!("User '{}' not found", user));
             }
         } else {
             return Err(anyhow!(
-                "Unable to find admins section in user configuration"
+                "Unable to find users section in user configuration"
             ));
         }
 
@@ -220,14 +220,14 @@ impl User {
 
         let mut conf = configuration::load_user_configuration(file)?;
 
-        if let Some(user_conf) = conf.get_mut("admins") {
+        if let Some(user_conf) = configuration::get_users_mut(&mut conf) {
             if user_conf.get(user).is_none() {
                 return Err(anyhow!("User '{}' not found", user));
             }
             user_conf.insert(user.to_string(), password_str);
         } else {
             return Err(anyhow!(
-                "Unable to find admins section in user configuration"
+                "Unable to find users section in user configuration"
             ));
         }
 
@@ -258,8 +258,7 @@ impl User {
         }
 
         let conf = configuration::load_user_configuration(file)?;
-        let mut users: Vec<String> = conf
-            .get("admins")
+        let mut users: Vec<String> = configuration::get_users(&conf)
             .map(|user_conf| user_conf.keys().cloned().collect())
             .unwrap_or_default();
         users.sort_unstable();
@@ -346,9 +345,9 @@ mod tests {
         // Verify user was added
         let content_added = fs::read_to_string(&temp_file).unwrap();
         let users_added: UserConf = serde_ini::from_str(&content_added).unwrap();
-        assert!(users_added.contains_key("admins"));
-        assert!(users_added["admins"].contains_key("test_user"));
-        assert!(!users_added["admins"]["test_user"].is_empty());
+        assert!(users_added.contains_key(configuration::DEFAULT_USER_SECTION));
+        assert!(users_added[configuration::DEFAULT_USER_SECTION].contains_key("test_user"));
+        assert!(!users_added[configuration::DEFAULT_USER_SECTION]["test_user"].is_empty());
 
         // Edit the user
         User::edit_user(temp_file_str, "test_user", "new_pass").unwrap();
@@ -357,8 +356,8 @@ mod tests {
         let content_edited = fs::read_to_string(&temp_file).unwrap();
         let users_edited: UserConf = serde_ini::from_str(&content_edited).unwrap();
         assert_ne!(
-            users_added["admins"]["test_user"],
-            users_edited["admins"]["test_user"]
+            users_added[configuration::DEFAULT_USER_SECTION]["test_user"],
+            users_edited[configuration::DEFAULT_USER_SECTION]["test_user"]
         );
 
         // Remove the user
@@ -369,7 +368,7 @@ mod tests {
         let users_removed: UserConf = serde_ini::from_str(&content_removed).unwrap();
         assert!(
             !users_removed
-                .get("admins")
+                .get(configuration::DEFAULT_USER_SECTION)
                 .is_some_and(|a| a.contains_key("test_user"))
         );
 
