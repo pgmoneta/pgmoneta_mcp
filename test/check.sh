@@ -426,7 +426,8 @@ ci_install_utilities() {
     fi
 
     dnf update -y
-    dnf install -y cargo nmap-ncat git gcc clang cmake make
+    dnf install -y cargo nmap-ncat git gcc clang cmake make curl tar
+    install_nextest || true
 
     # pgmoneta source build requires libev headers; install by pkg-config provide first.
     if ! dnf install -y libev 'pkgconfig(libev)'; then
@@ -678,6 +679,97 @@ install_dependencies() {
     echo "Installing dependencies..."
     dnf update -y
     dnf install -y cargo # currently we just need cargo to run pgmoneta-mcp, others are installed in the ci or by docker/podman
+    install_nextest || true
+}
+
+have_nextest() {
+    cargo nextest --version >/dev/null 2>&1
+}
+
+install_nextest() {
+    if have_nextest; then
+        return 0
+    fi
+
+    echo "Installing cargo-nextest..."
+    local dest_dir="${CARGO_HOME:-$HOME/.cargo}/bin"
+    mkdir -p "$dest_dir"
+    if ! curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C "$dest_dir"; then
+        echo "Warning: failed to install cargo-nextest; falling back to cargo test"
+        return 1
+    fi
+    export PATH="$dest_dir:$PATH"
+    have_nextest
+}
+
+# Prefer nextest when available; keep cargo test as a fallback for contributors
+# who have not installed it yet.
+run_cargo_tests() {
+    local mode="$1"
+    shift
+
+    local nextest_profile="integration"
+    local nextest_filter=""
+    local cargo_args=()
+    local cargo_harness_args=(--test-threads=1 --nocapture)
+
+    case "$mode" in
+        unit)
+            nextest_profile="unit"
+            cargo_args=(--lib)
+            if [[ -n "$MODULE_FILTER" ]]; then
+                nextest_filter="kind(lib) & test($MODULE_FILTER)"
+                cargo_harness_args+=("$MODULE_FILTER")
+            else
+                nextest_filter="kind(lib)"
+            fi
+            ;;
+        suite)
+            cargo_args=(--all-features)
+            cargo_harness_args+=(--include-ignored)
+            if [[ -n "$MODULE_FILTER" ]]; then
+                nextest_filter="test($MODULE_FILTER)"
+                cargo_args+=("$MODULE_FILTER")
+            fi
+            ;;
+        integration)
+            cargo_args=(--all-features --tests)
+            cargo_harness_args+=(--include-ignored)
+            if [[ -n "$MODULE_FILTER" ]]; then
+                nextest_filter="kind(test) & test($MODULE_FILTER)"
+                cargo_args+=("$MODULE_FILTER")
+            else
+                nextest_filter="kind(test)"
+            fi
+            ;;
+        info_test)
+            cargo_args=(--test info_test)
+            cargo_harness_args+=(--include-ignored)
+            nextest_filter="binary(info_test)"
+            ;;
+        *)
+            echo "Error: unknown cargo test mode '$mode'" >&2
+            return 1
+            ;;
+    esac
+
+    if have_nextest; then
+        local nextest_args=(nextest run --profile "$nextest_profile" --no-capture)
+        if [[ "$mode" != "unit" ]]; then
+            nextest_args+=(--run-ignored all)
+        fi
+        if [[ "$mode" == "suite" || "$mode" == "integration" ]]; then
+            nextest_args+=(--all-features)
+        fi
+        if [[ -n "$nextest_filter" ]]; then
+            nextest_args+=(-E "$nextest_filter")
+        fi
+        echo "Using cargo-nextest ($nextest_profile)"
+        cargo "${nextest_args[@]}"
+    else
+        echo "cargo-nextest not found; using cargo test"
+        cargo test "${cargo_args[@]}" -- "${cargo_harness_args[@]}"
+    fi
 }
 
 run_info_test_matrix() {
@@ -685,31 +777,17 @@ run_info_test_matrix() {
     for comp in none gzip zstd lz4 bzip2; do
         for enc in none aes_128_gcm aes_192_gcm aes_256_gcm; do
             echo "Matrix mode: compression=$comp encryption=$enc"
-            PGMONETA_MCP_COMPRESSION="$comp" PGMONETA_MCP_ENCRYPTION="$enc" cargo test --test info_test -- --test-threads=1 --nocapture --include-ignored
+            PGMONETA_MCP_COMPRESSION="$comp" PGMONETA_MCP_ENCRYPTION="$enc" run_cargo_tests info_test
         done
     done
 }
 
 run_testcontainers_suite() {
-    local cargo_filter=()
-
-    if [[ -n "$MODULE_FILTER" ]]; then
-        cargo_filter+=("$MODULE_FILTER")
-    fi
-
-    cargo test --all-features "${cargo_filter[@]}" -- \
-        --test-threads=1 --nocapture --include-ignored
+    run_cargo_tests suite
 }
 
 run_testcontainers_targets() {
-    local cargo_filter=()
-
-    if [[ -n "$MODULE_FILTER" ]]; then
-        cargo_filter+=("$MODULE_FILTER")
-    fi
-
-    cargo test --all-features --tests "${cargo_filter[@]}" -- \
-        --test-threads=1 --nocapture --include-ignored
+    run_cargo_tests integration
 }
 
 prepare_testcontainers() {
@@ -849,11 +927,7 @@ case "$SUBCOMMAND" in
         cleanup
         handle_master_key
         build_test_suite
-        if [[ -n "$MODULE_FILTER" ]]; then
-            cargo test --lib -- --test-threads=1 --nocapture -- $MODULE_FILTER
-        else
-            cargo test --lib -- --test-threads=1 --nocapture
-        fi
+        run_cargo_tests unit
         ;;
     ci)
         trap ci_shutdown EXIT

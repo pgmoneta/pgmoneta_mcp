@@ -3,7 +3,15 @@
 ## Dependencies
 
 To install all the required dependencies (rust, make and cargo), simply run `<PATH_TO_PGMONETA_MCP>/test/check.sh setup`. You need to install docker or podman
-separately. The script currently only works on Linux system (we recommend Fedora 39+). 
+separately. The script currently only works on Linux system (we recommend Fedora 39+).
+
+Test execution prefers [cargo-nextest](https://nexte.st/) when it is installed
+(see `.config/nextest.toml`). If nextest is missing, `test/check.sh` falls back
+to `cargo test`. Install nextest with:
+
+```bash
+curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
+```
 
 ## Running Tests
 
