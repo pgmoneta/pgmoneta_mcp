@@ -90,13 +90,14 @@ const SLASH_COMMANDS: &[&str] = &[
     "/user",
 ];
 const NATURAL_LANGUAGE_SYSTEM_PROMPT: &str = "\
-You translate user requests into pgmoneta MCP tool invocations. \
-Always respond with tool calls from the provided tool list instead of plain text. \
+You assist users with pgmoneta MCP operations. \
+When the user's request matches operations supported by the provided tool list, respond with tool calls instead of plain text. \
 If the request asks for a single operation, select the single best matching tool. \
 If the request asks for several operations, return one tool call per operation, in the order the user asked for them. \
 Use arguments that are explicitly provided by the user and match the tool schema. \
 Do not invent values. Omit optional arguments when the user did not specify them. \
-If the user mentions a pgmoneta server name such as primary or standby, pass it through the tool's `server` argument.";
+If the user mentions a pgmoneta server name such as primary or standby, pass it through the tool's `server` argument. \
+If the request is a general question, explanation, or cannot be fulfilled using the available tools, respond directly with a clear and concise markdown answer.";
 const NATURAL_LANGUAGE_RENDER_SYSTEM_PROMPT: &str = "\
 You are a response formatter for pgmoneta MCP client output. \
 Given a user request, tool name, tool description, and raw JSON tool result, produce a concise, user-friendly markdown response. \
@@ -180,6 +181,13 @@ enum ClientCommand {
 struct PlannedToolCall {
     name: String,
     args: HashMap<String, Value>,
+}
+
+/// The execution plan produced by the LLM for a natural-language request.
+#[derive(Debug, Clone, PartialEq)]
+enum NaturalLanguagePlan {
+    ToolCalls(Vec<PlannedToolCall>),
+    Text(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -960,7 +968,7 @@ fn run_repl(
                         match runtime
                             .block_on(translate_natural_language(llm, &llm_tools, &request))
                         {
-                            Ok(tool_calls) => {
+                            Ok(NaturalLanguagePlan::ToolCalls(tool_calls)) => {
                                 let total = tool_calls.len();
                                 for (index, tool_call) in tool_calls.into_iter().enumerate() {
                                     if total > 1 {
@@ -1001,6 +1009,10 @@ fn run_repl(
                                         break;
                                     }
                                 }
+                            }
+                            Ok(NaturalLanguagePlan::Text(text)) => {
+                                let output = ensure_user_mode_markdown_output(&text)?;
+                                println!("{}", markdown::render_markdown_for_console(&output));
                             }
                             Err(error) => eprintln!("{}", format_runtime_error(&error)),
                         }
@@ -2169,7 +2181,7 @@ async fn translate_natural_language<L: LlmClient>(
     llm: &L,
     tools: &[ToolDefinition],
     input: &str,
-) -> Result<Vec<PlannedToolCall>> {
+) -> Result<NaturalLanguagePlan> {
     let messages = [
         ChatMessage::system(NATURAL_LANGUAGE_SYSTEM_PROMPT),
         ChatMessage::user(input),
@@ -2195,23 +2207,25 @@ async fn translate_natural_language<L: LlmClient>(
                 ));
             }
 
-            Ok(tool_calls
-                .into_iter()
-                .map(|tool_call| PlannedToolCall {
-                    name: tool_call.function.name,
-                    args: tool_call.function.arguments,
-                })
-                .collect())
+            Ok(NaturalLanguagePlan::ToolCalls(
+                tool_calls
+                    .into_iter()
+                    .map(|tool_call| PlannedToolCall {
+                        name: tool_call.function.name,
+                        args: tool_call.function.arguments,
+                    })
+                    .collect(),
+            ))
         }
         LlmResponse::Text(text) => {
             let detail = text.trim();
             if detail.is_empty() {
                 Err(anyhow!(
-                    "LLM did not select a tool for '{}'. Please try rephrasing the request.",
+                    "LLM returned an empty response for '{}'. Please try rephrasing the request.",
                     input
                 ))
             } else {
-                Err(anyhow!("LLM did not select a tool: {}", detail))
+                Ok(NaturalLanguagePlan::Text(detail.to_string()))
             }
         }
     }
@@ -3651,10 +3665,10 @@ mod tests {
 
         assert_eq!(
             command,
-            vec![PlannedToolCall {
+            NaturalLanguagePlan::ToolCalls(vec![PlannedToolCall {
                 name: "list_backups".to_string(),
                 args: HashMap::from([("server".to_string(), json!("primary"))]),
-            }]
+            }])
         );
     }
 
@@ -3679,10 +3693,10 @@ mod tests {
 
         assert_eq!(
             command,
-            vec![PlannedToolCall {
+            NaturalLanguagePlan::ToolCalls(vec![PlannedToolCall {
                 name: "backup".to_string(),
                 args: HashMap::from([("server".to_string(), json!("primary"))]),
-            }]
+            }])
         );
     }
 
@@ -3718,7 +3732,7 @@ mod tests {
 
         assert_eq!(
             command,
-            vec![
+            NaturalLanguagePlan::ToolCalls(vec![
                 PlannedToolCall {
                     name: "backup".to_string(),
                     args: HashMap::from([("server".to_string(), json!("primary"))]),
@@ -3727,7 +3741,7 @@ mod tests {
                     name: "list_backups".to_string(),
                     args: HashMap::from([("server".to_string(), json!("primary"))]),
                 },
-            ]
+            ])
         );
     }
 
@@ -3843,20 +3857,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_translate_natural_language_rejects_plain_text_response() {
+    async fn test_translate_natural_language_returns_text_response() {
         let llm = MockLlm {
-            response: LlmResponse::Text("I think you should call list_backups".to_string()),
+            response: LlmResponse::Text(
+                "pgmoneta is a backup and restore solution for PostgreSQL.".to_string(),
+            ),
         };
 
-        let err = translate_natural_language(
-            &llm,
-            &[sample_llm_tool_definition()],
-            "List backups on primary server",
-        )
-        .await
-        .unwrap_err();
+        let command =
+            translate_natural_language(&llm, &[sample_llm_tool_definition()], "What is pgmoneta?")
+                .await
+                .unwrap();
 
-        assert!(err.to_string().contains("did not select a tool"));
+        assert_eq!(
+            command,
+            NaturalLanguagePlan::Text(
+                "pgmoneta is a backup and restore solution for PostgreSQL.".to_string()
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_translate_natural_language_rejects_empty_text_response() {
+        let llm = MockLlm {
+            response: LlmResponse::Text("   \n\t  ".to_string()),
+        };
+
+        let err =
+            translate_natural_language(&llm, &[sample_llm_tool_definition()], "What is pgmoneta?")
+                .await
+                .unwrap_err();
+
+        assert!(err.to_string().contains("empty response"));
     }
 
     #[test]

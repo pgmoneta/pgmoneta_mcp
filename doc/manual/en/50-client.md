@@ -82,7 +82,8 @@ Restore the latest backup for server primary to /tmp/pgmoneta-restore
 
 The client sends the available tool definitions to the active model, asks it to
 choose the matching tool and JSON arguments, executes the tool, and renders the
-result.
+result. When the request is a general question or cannot be fulfilled using the
+available tools, the model answers directly in markdown.
 
 With `confirm = on` in `[pgmoneta_mcp_client]`, the client asks before running a
 tool that changes something, such as `backup`, `delete` or `restore`. It shows
