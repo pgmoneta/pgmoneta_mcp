@@ -46,6 +46,7 @@ The `[pgmoneta_mcp_client]` section controls the MCP connection:
 | `url` | Yes | Full MCP endpoint, including `/mcp`. |
 | `timeout` | No | Connection and request timeout in seconds. Defaults to `30`. |
 | `model` | No | Default named LLM profile for natural-language requests. Required when more than one profile is configured. |
+| `confirm` | No | Ask before running a tool that is not read-only in user mode, `on` or `off`. Defaults to `off`. See User mode below. |
 
 Each additional section, such as `[qwen]`, is a named LLM profile. The section
 name is what you use with `/model`.
@@ -82,6 +83,22 @@ Restore the latest backup for server primary to /tmp/pgmoneta-restore
 The client sends the available tool definitions to the active model, asks it to
 choose the matching tool and JSON arguments, executes the tool, and renders the
 result.
+
+With `confirm = on` in `[pgmoneta_mcp_client]`, the client asks before running a
+tool that changes something, such as `backup`, `delete` or `restore`. It shows
+what the model picked first:
+
+``` text
+delete on primary
+  backup_id: oldest
+? Run it? (y/N)
+```
+
+Only `y` runs it. `n`, `Enter`, `Esc` or `Ctrl+C` cancel it and nothing is
+sent to pgmoneta. When a request runs several tools, cancelling one skips the
+ones after it too. Tools the server marks as read-only, such as `list_backups`
+or `get_info`, run without asking, and so does every call in developer mode,
+where you type the exact call yourself.
 
 Use `/model` to show the active profile and `/model <name>` to switch profiles:
 

@@ -192,6 +192,9 @@ pub struct ClientConfiguration {
     /// Default named LLM profile for natural-language requests.
     #[serde(default)]
     pub model: String,
+    /// Ask before running a tool that is not read-only in user mode. Default: off.
+    #[serde(default)]
+    pub confirm: bool,
 }
 
 /// Root configuration for the interactive MCP client.
@@ -527,7 +530,29 @@ mod tests {
         assert_eq!(conf.client.url, "http://localhost:8000/mcp");
         assert_eq!(conf.client.timeout, 30);
         assert!(conf.client.model.is_empty());
+        assert!(!conf.client.confirm);
         assert!(conf.llms.is_empty());
+    }
+
+    #[test]
+    fn test_load_client_configuration_confirm() {
+        for (value, expected) in [
+            ("on", true),
+            ("true", true),
+            ("off", false),
+            ("false", false),
+        ] {
+            let mut file = tempfile::NamedTempFile::new().unwrap();
+            writeln!(
+                file,
+                "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\nconfirm = {value}\n"
+            )
+            .unwrap();
+
+            let conf = load_client_configuration(file.path().to_str().unwrap()).unwrap();
+
+            assert_eq!(conf.client.confirm, expected, "confirm = {value}");
+        }
     }
 
     #[test]

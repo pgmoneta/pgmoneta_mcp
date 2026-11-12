@@ -18,7 +18,7 @@ mod markdown;
 mod natural;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
-use inquire::Select;
+use inquire::{Confirm, InquireError, Select};
 use pgmoneta_mcp::configuration::{self, LlmConfiguration};
 use pgmoneta_mcp::llm::{
     ChatMessage, LlmClient, LlmResponse, OpenAiClient, ToolDefinition, mcp_tools_to_llm_schema,
@@ -59,6 +59,8 @@ const CLEAR_TERMINAL_SEQUENCE: &str = "\x1b[2J\x1b[H";
 /// afterwards (the status banner) remains.
 const CLEAR_SCREEN_AND_SCROLLBACK_SEQUENCE: &str = "\x1b[H\x1b[2J\x1b[3J";
 const CTRL_C_EXIT_MESSAGE: &str = "Press Ctrl+c again to quit";
+const CONFIRMATION_QUESTION: &str = "Run it?";
+const CONFIRMATION_DECLINED_MESSAGE: &str = "Cancelled, nothing was run.";
 const LOGO_ART_COLOR: &str = "\x1b[38;5;202m";
 const ANSI_RESET: &str = "\x1b[0m";
 const GHOST_TEXT_COLOR: &str = "\x1b[38;2;120;120;120m";
@@ -191,6 +193,7 @@ struct ReplClientConfiguration<'a> {
     url: &'a str,
     timeout: u64,
     model: Option<&'a str>,
+    confirm: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -541,6 +544,7 @@ fn main() -> Result<()> {
             url: &config.client.url,
             timeout: config.client.timeout,
             model: default_model_name(&config.client.model),
+            confirm: config.client.confirm,
         },
         &defaults,
         &llms,
@@ -933,7 +937,7 @@ fn run_repl(
                         execute_tool_command(
                             runtime,
                             active_client,
-                            &mut editor,
+                            repl_configuration.confirm,
                             &tools,
                             defaults,
                             mode,
@@ -978,7 +982,7 @@ fn run_repl(
                                     let succeeded = execute_tool_command(
                                         runtime,
                                         active_client,
-                                        &mut editor,
+                                        repl_configuration.confirm,
                                         &tools,
                                         defaults,
                                         mode,
@@ -1529,7 +1533,7 @@ fn select_username(users_path: &str) -> Result<String> {
 fn execute_tool_command(
     runtime: &Runtime,
     client: &McpClient,
-    _editor: &mut ClientEditor,
+    confirm: bool,
     tools: &[Tool],
     defaults: &ClientDefaults,
     mode: ClientMode,
@@ -1552,6 +1556,10 @@ fn execute_tool_command(
         let missing = missing_required_arguments(&tool.input_schema, &args);
         if !missing.is_empty() {
             println!("{}", format_missing_required_arguments(&missing));
+            return Ok(false);
+        }
+        if confirm && needs_confirmation(tool) && !confirm_tool_call(&name, &args) {
+            println!("{CONFIRMATION_DECLINED_MESSAGE}");
             return Ok(false);
         }
     }
@@ -1624,6 +1632,56 @@ fn format_skipped_steps_message(failed_step: usize, total: usize) -> String {
 
 fn format_step_request(step: usize, total: usize, tool_name: &str) -> String {
     format!("Step {step} of {total} of a multi-step request: ran the {tool_name} tool.")
+}
+
+/// Whether user mode asks before running `tool`: anything the server does not
+/// mark as read-only, including a tool from a server that sets no annotations.
+fn needs_confirmation(tool: &Tool) -> bool {
+    tool.annotations
+        .as_ref()
+        .and_then(|annotations| annotations.read_only_hint)
+        != Some(true)
+}
+
+/// What is about to run, shown above the question: the tool and its server,
+/// then the other arguments, one per line. The injected username is left out.
+fn format_confirmation(name: &str, args: &HashMap<String, Value>) -> String {
+    let mut text = match args.get("server").and_then(Value::as_str) {
+        Some(server) => format!("{name} on {server}"),
+        None => name.to_string(),
+    };
+
+    let mut keys = args
+        .keys()
+        .filter(|key| *key != "server" && *key != "username")
+        .collect::<Vec<_>>();
+    keys.sort();
+    for key in keys {
+        let value = match &args[key] {
+            Value::String(value) => value.clone(),
+            value => value.to_string(),
+        };
+        text.push_str(&format!("\n  {key}: {value}"));
+    }
+
+    text
+}
+
+/// Shows what is about to run and asks whether to run it. Anything but a yes,
+/// including Esc, Ctrl+C or a prompt that cannot be shown, means no.
+fn confirm_tool_call(name: &str, args: &HashMap<String, Value>) -> bool {
+    println!("{}", format_confirmation(name, args));
+    match Confirm::new(CONFIRMATION_QUESTION)
+        .with_default(false)
+        .prompt()
+    {
+        Ok(answer) => answer,
+        Err(InquireError::OperationCanceled | InquireError::OperationInterrupted) => false,
+        Err(error) => {
+            eprintln!("Error: Failed to ask for confirmation: {error}");
+            false
+        }
+    }
 }
 
 async fn postprocess_tool_output_markdown<T: LlmClient>(
@@ -3817,5 +3875,61 @@ mod tests {
         ));
         assert!(prompt.contains("Tool output:\n- 20260718173645 | Full | Valid"));
         assert!(prompt.ends_with("Write the final user response in markdown."));
+    }
+
+    fn annotated_tool(annotations: Option<rmcp::model::ToolAnnotations>) -> Tool {
+        let tool = Tool::new("delete", "Delete a backup.", serde_json::Map::new());
+        match annotations {
+            Some(annotations) => tool.with_annotations(annotations),
+            None => tool,
+        }
+    }
+
+    #[test]
+    fn test_only_read_only_tools_skip_confirmation() {
+        use rmcp::model::ToolAnnotations;
+
+        assert!(!needs_confirmation(&annotated_tool(Some(
+            ToolAnnotations::new().read_only(true)
+        ))));
+        assert!(needs_confirmation(&annotated_tool(Some(
+            ToolAnnotations::new().read_only(false).destructive(true)
+        ))));
+        assert!(needs_confirmation(&annotated_tool(Some(
+            ToolAnnotations::new().read_only(false).destructive(false)
+        ))));
+        // An older server sets no annotations, so we cannot tell: ask.
+        assert!(needs_confirmation(&annotated_tool(Some(
+            ToolAnnotations::new()
+        ))));
+        assert!(needs_confirmation(&annotated_tool(None)));
+    }
+
+    #[test]
+    fn test_format_confirmation_shows_tool_server_and_arguments() {
+        let args = HashMap::from([
+            ("username".to_string(), json!("admin")),
+            ("server".to_string(), json!("primary")),
+            ("backup_id".to_string(), json!("oldest")),
+            ("force".to_string(), json!(true)),
+        ]);
+
+        assert_eq!(
+            format_confirmation("delete", &args),
+            "delete on primary\n  backup_id: oldest\n  force: true"
+        );
+    }
+
+    #[test]
+    fn test_format_confirmation_without_a_server() {
+        let args = HashMap::from([
+            ("username".to_string(), json!("admin")),
+            ("file".to_string(), json!("/tmp/backup.tar")),
+        ]);
+
+        assert_eq!(
+            format_confirmation("encrypt", &args),
+            "encrypt\n  file: /tmp/backup.tar"
+        );
     }
 }

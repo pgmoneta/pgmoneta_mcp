@@ -206,6 +206,7 @@ The `[pgmoneta_mcp_client]` section controls the MCP connection.
 | `url` | Yes | - | Full MCP endpoint, including `/mcp` |
 | `timeout` | No | `30` | Connection and request timeout in seconds |
 | `model` | No | - | Default named LLM profile for natural-language requests |
+| `confirm` | No | `off` | Ask before running a tool that is not read-only in user mode (`on` or `off`) |
 
 Any other section in the client file is treated as a named LLM profile. In the
 example above, `[gemma]` is the profile name. If exactly one profile is present,
