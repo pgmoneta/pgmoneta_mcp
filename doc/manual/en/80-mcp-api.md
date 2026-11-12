@@ -113,6 +113,24 @@ The `backup`, `restore`, `archive`, and `delete` tools also accept an optional
 and continues the operation in the background. When it is omitted or `false`,
 the operation remains synchronous.
 
+**Tool annotations**
+
+Every tool carries the MCP `readOnlyHint` and `destructiveHint` annotations, so
+a client can tell the tools that only read from pgmoneta apart from the ones
+that change something, and warn before running the latter:
+
+| Group | Tools |
+| :---- | :---- |
+| Read-only | `get_info`, `list_backups`, `status`, `ping`, `conf_ls`, `conf_get`, `get_metrics`, `metric`, `job`, `job_status`, `job_list_all`, `job_list_server`, `job_list_status` |
+| Changes something, nothing is lost | `backup`, `archive`, `verify`, `retain`, `set_mode`, `conf_reload` |
+| Destructive | `delete`, `expunge`, `restore`, `shutdown`, `clear`, `conf_set`, `annotate_backup`, `compress`, `decompress`, `encrypt`, `decrypt`, `job_remove` |
+
+`retain`, `expunge`, `set_mode`, `conf_set` and `conf_reload` also set
+`idempotentHint`, since running them again with the same arguments changes
+nothing more.
+
+When adding a tool, give it an `annotations()` from `handler::hints`.
+
 **say_hello**
 
 **Description**: Simple ping tool to verify MCP server connectivity.

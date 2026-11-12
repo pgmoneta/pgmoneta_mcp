@@ -16,12 +16,12 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::PgmonetaHandler;
+use super::{PgmonetaHandler, hints};
 use crate::client::PgmonetaClient;
 use crate::constant::Sort;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
-use rmcp::model::JsonObject;
+use rmcp::model::{JsonObject, ToolAnnotations};
 use rmcp::schemars;
 
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
@@ -48,6 +48,10 @@ impl ToolBase for GetBackupInfoTool {
 
     fn name() -> Cow<'static, str> {
         "get_info".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::read_only())
     }
 
     fn description() -> Option<Cow<'static, str>> {
@@ -98,6 +102,10 @@ impl ToolBase for ListBackupsTool {
 
     fn name() -> Cow<'static, str> {
         "list_backups".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::read_only())
     }
 
     fn description() -> Option<Cow<'static, str>> {

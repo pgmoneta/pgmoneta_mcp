@@ -8,15 +8,15 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::PgmonetaHandler;
+use super::{PgmonetaHandler, hints};
 use crate::client::PgmonetaClient;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
-use rmcp::model::JsonObject;
+use rmcp::model::{JsonObject, ToolAnnotations};
 use rmcp::schemars;
 
 macro_rules! job_tool {
-    ($tool:ident, $request:ty, $name:literal, $description:literal, $invoke:expr) => {
+    ($tool:ident, $request:ty, $name:literal, $hints:expr, $description:literal, $invoke:expr) => {
         pub struct $tool;
 
         impl ToolBase for $tool {
@@ -26,6 +26,10 @@ macro_rules! job_tool {
 
             fn name() -> Cow<'static, str> {
                 $name.into()
+            }
+
+            fn annotations() -> Option<ToolAnnotations> {
+                Some($hints)
             }
 
             fn description() -> Option<Cow<'static, str>> {
@@ -95,6 +99,7 @@ job_tool!(
     JobTool,
     JobRequest,
     "job",
+    hints::read_only(),
     "Get an async job. \
     Requires a job identifier returned by an async backup, restore, archive, or delete operation. \
     Returns the active job if it is still running, or its persisted result after it finishes. \
@@ -108,6 +113,7 @@ job_tool!(
     JobStatusTool,
     JobStatusRequest,
     "job_status",
+    hints::read_only(),
     "Get the status of an async job for a server operation. \
     Requires a server name and a command. \
     The command must be backup, restore, archive, or delete. \
@@ -123,6 +129,7 @@ job_tool!(
     JobListAllTool,
     JobListAllRequest,
     "job_list_all",
+    hints::read_only(),
     "List all active and persisted async jobs. \
     The username has to be one of the pgmoneta admins to be able to access pgmoneta.",
     |request: JobListAllRequest| async move {
@@ -134,6 +141,7 @@ job_tool!(
     JobListServerTool,
     JobListByServerRequest,
     "job_list_server",
+    hints::read_only(),
     "List active and persisted async jobs for a server. \
     Requires a server name. \
     The username has to be one of the pgmoneta admins to be able to access pgmoneta.",
@@ -146,6 +154,7 @@ job_tool!(
     JobListStatusTool,
     JobListByStateRequest,
     "job_list_status",
+    hints::read_only(),
     "List async jobs by state. \
     Requires a state of Running, Completed, or Failed. \
     The username has to be one of the pgmoneta admins to be able to access pgmoneta.",
@@ -158,6 +167,7 @@ job_tool!(
     JobRemoveTool,
     JobRemoveRequest,
     "job_remove",
+    hints::destructive(),
     "Remove persisted async job records. \
     Specify a job identifier to remove one record, or omit it to remove all persisted job records. \
     Active jobs cannot be removed. Removing a record does not remove the backup or output created by the operation. \
