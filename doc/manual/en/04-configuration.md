@@ -92,6 +92,11 @@ There is no `[pgmoneta_mcp].host` setting. The MCP endpoint is available at:
 http://<server-host>:<port>/mcp
 ```
 
+The same port also serves the MCP server's own Prometheus metrics at
+`http://<server-host>:<port>/metrics`. This is separate from the `metrics`
+port in the `[pgmoneta]` section, which is the pgmoneta server's metrics
+endpoint.
+
 `log_rotation_age` accepts:
 
 | Value | Meaning |
@@ -104,6 +109,23 @@ http://<server-host>:<port>/mcp
 
 When file rotation is enabled, `log_path` is treated as a filename prefix for
 rotated files.
+
+### CORS
+
+The MCP server has CORS enabled. The policy is fixed and cannot be changed in
+the configuration file:
+
+| CORS setting | Value |
+| :----------- | :---- |
+| Allowed origins | Any (`*`) |
+| Allowed methods | Any |
+| Allowed headers | Any |
+| Exposed headers | Any |
+| Preflight cache (`Access-Control-Max-Age`) | 86400 seconds (24 hours) |
+
+Because any origin is allowed, do not expose the MCP port to untrusted
+networks. Restrict access with a firewall, a reverse proxy, or SSH tunneling
+instead.
 
 ## Section: `[pgmoneta]`
 

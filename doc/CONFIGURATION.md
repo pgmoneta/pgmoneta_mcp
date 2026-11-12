@@ -17,8 +17,19 @@ The other section, called `[pgmoneta]`, is where you configure connection with `
 | log_type | console | String | No | The logging type (console, file, syslog) |
 | log_level | info | String | No | The logging level, any of the strings `trace`, `debug`, `info`, `warn` and `error`|
 | log_path | pgmoneta_mcp.log | String | No | The log file location |
+| log_line_prefix | %Y-%m-%d %H:%M:%S | String | No | The timestamp format used by the logger |
 | log_mode | append | String | No | Append to or create the log file, any of the strings (`append`, `create`) |
 | log_rotation_age | 0 | String | No | The time after which log file rotation is triggered. when `log_type = file` and `log_mode = append`. `log_path` is treated as a filename prefix for rotated files. Any of the chars (`0`) for never rotate, (`m`, `M`) for minutely rotation, (`h`, `H`) for hourly rotation, (`d`, `D`) for daily rotation and (`w`, `W`) for weekly rotation |
+
+The MCP endpoint is served at `http://<host>:<port>/mcp`. The same port also
+serves the MCP server's own Prometheus metrics at `/metrics`.
+
+### CORS
+
+CORS is enabled with a fixed policy that is not configurable: any origin, any
+method, any header and any exposed header are allowed, and preflight responses
+are cached for 24 hours (`Access-Control-Max-Age: 86400`). Since any origin is
+allowed, do not expose the MCP port to untrusted networks.
 
 ## [pgmoneta]
 
