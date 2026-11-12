@@ -16,11 +16,11 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::PgmonetaHandler;
+use super::{PgmonetaHandler, hints};
 use crate::client::PgmonetaClient;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
-use rmcp::model::JsonObject;
+use rmcp::model::{JsonObject, ToolAnnotations};
 use rmcp::schemars;
 
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
@@ -45,6 +45,10 @@ impl ToolBase for CompressFileTool {
 
     fn name() -> Cow<'static, str> {
         "compress".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::destructive())
     }
 
     fn description() -> Option<Cow<'static, str>> {
@@ -93,6 +97,10 @@ impl ToolBase for DecompressFileTool {
 
     fn name() -> Cow<'static, str> {
         "decompress".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::destructive())
     }
 
     fn description() -> Option<Cow<'static, str>> {

@@ -16,11 +16,11 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::PgmonetaHandler;
+use super::{PgmonetaHandler, hints};
 use crate::client::PgmonetaClient;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
-use rmcp::model::JsonObject;
+use rmcp::model::{JsonObject, ToolAnnotations};
 use rmcp::schemars;
 
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
@@ -40,6 +40,10 @@ impl ToolBase for SetModeTool {
 
     fn name() -> Cow<'static, str> {
         "set_mode".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::additive().idempotent(true))
     }
 
     fn description() -> Option<Cow<'static, str>> {

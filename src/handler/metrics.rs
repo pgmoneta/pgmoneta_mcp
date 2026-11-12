@@ -17,12 +17,12 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::PgmonetaHandler;
+use super::{PgmonetaHandler, hints};
 use crate::client::PgmonetaClient;
 use anyhow::{Result, anyhow, bail};
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
-use rmcp::model::JsonObject;
+use rmcp::model::{JsonObject, ToolAnnotations};
 use rmcp::schemars;
 use serde_json::Value;
 
@@ -67,6 +67,10 @@ impl ToolBase for GetMetricsTool {
         "get_metrics".into()
     }
 
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::read_only())
+    }
+
     fn description() -> Option<Cow<'static, str>> {
         Some(
             "Fetch all Prometheus metrics exposed by pgmoneta from the configured metrics endpoint. \
@@ -103,6 +107,10 @@ impl ToolBase for MetricTool {
 
     fn name() -> Cow<'static, str> {
         "metric".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::read_only())
     }
 
     fn description() -> Option<Cow<'static, str>> {

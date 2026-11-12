@@ -16,11 +16,11 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::PgmonetaHandler;
+use super::{PgmonetaHandler, hints};
 use crate::client::PgmonetaClient;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
-use rmcp::model::JsonObject;
+use rmcp::model::{JsonObject, ToolAnnotations};
 use rmcp::schemars;
 
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
@@ -55,6 +55,10 @@ impl ToolBase for ConfReloadTool {
 
     fn name() -> Cow<'static, str> {
         "conf_reload".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::additive().idempotent(true))
     }
 
     fn description() -> Option<Cow<'static, str>> {
@@ -102,6 +106,10 @@ impl ToolBase for ConfLsTool {
         "conf_ls".into()
     }
 
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::read_only())
+    }
+
     fn description() -> Option<Cow<'static, str>> {
         Some(
             "List the pgmoneta server configuration. \
@@ -142,6 +150,10 @@ impl ToolBase for ConfGetTool {
         "conf_get".into()
     }
 
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::read_only())
+    }
+
     fn description() -> Option<Cow<'static, str>> {
         Some(
             "Get the pgmoneta server configuration. \
@@ -180,6 +192,10 @@ impl ToolBase for ConfSetTool {
 
     fn name() -> Cow<'static, str> {
         "conf_set".into()
+    }
+
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(hints::destructive().idempotent(true))
     }
 
     fn description() -> Option<Cow<'static, str>> {

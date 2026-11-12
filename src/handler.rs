@@ -42,6 +42,27 @@ use rmcp::{
 use serde_json::Map;
 use serde_json::Value;
 
+/// MCP annotations for the tools, so a client can tell the tools that only
+/// read from pgmoneta apart from the ones that change or remove something.
+pub mod hints {
+    use rmcp::model::ToolAnnotations;
+
+    /// The tool only reads from pgmoneta.
+    pub fn read_only() -> ToolAnnotations {
+        ToolAnnotations::new().read_only(true)
+    }
+
+    /// The tool changes something, but does not remove or overwrite data.
+    pub fn additive() -> ToolAnnotations {
+        ToolAnnotations::new().read_only(false).destructive(false)
+    }
+
+    /// The tool can remove or overwrite data, or stop the server.
+    pub fn destructive() -> ToolAnnotations {
+        ToolAnnotations::new().read_only(false).destructive(true)
+    }
+}
+
 /// The core handler for incoming Model Context Protocol (MCP) requests.
 ///
 /// This struct routes MCP tool calls from the client (like an AI model)
@@ -405,5 +426,77 @@ mod tests {
             parsed["Response"]["Backups"][0]["Compression"],
             json!("zstd")
         );
+    }
+
+    #[test]
+    fn test_every_tool_says_whether_it_is_read_only() {
+        let tools = PgmonetaHandler::tool_router().list_all();
+        assert!(!tools.is_empty());
+
+        for tool in &tools {
+            let annotations = tool
+                .annotations
+                .as_ref()
+                .unwrap_or_else(|| panic!("tool '{}' has no annotations", tool.name));
+            let read_only = annotations
+                .read_only_hint
+                .unwrap_or_else(|| panic!("tool '{}' has no readOnlyHint", tool.name));
+            if !read_only {
+                assert!(
+                    annotations.destructive_hint.is_some(),
+                    "tool '{}' changes things but has no destructiveHint",
+                    tool.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_tool_hints_match_what_the_tools_do() {
+        let router = PgmonetaHandler::tool_router();
+        let annotations = |name: &str| {
+            router
+                .get(name)
+                .and_then(|tool| tool.annotations.clone())
+                .unwrap_or_else(|| panic!("tool '{name}' is missing or has no annotations"))
+        };
+
+        for name in [
+            "get_info",
+            "list_backups",
+            "status",
+            "ping",
+            "conf_ls",
+            "conf_get",
+            "get_metrics",
+            "metric",
+            "job",
+            "job_status",
+            "job_list_all",
+            "job_list_server",
+            "job_list_status",
+        ] {
+            assert_eq!(annotations(name).read_only_hint, Some(true), "{name}");
+        }
+
+        for name in [
+            "delete",
+            "expunge",
+            "restore",
+            "shutdown",
+            "clear",
+            "conf_set",
+            "job_remove",
+        ] {
+            let hints = annotations(name);
+            assert_eq!(hints.read_only_hint, Some(false), "{name}");
+            assert!(hints.is_destructive(), "{name}");
+        }
+
+        for name in ["backup", "archive", "retain", "set_mode", "conf_reload"] {
+            let hints = annotations(name);
+            assert_eq!(hints.read_only_hint, Some(false), "{name}");
+            assert!(!hints.is_destructive(), "{name}");
+        }
     }
 }
