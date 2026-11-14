@@ -156,12 +156,13 @@ fn use_testcontainers() -> bool {
 }
 
 pub async fn init_config() -> TestEnv {
+    let host = env_or_default("PGMONETA_MCP_TEST_HOST", "localhost");
+    let test_port = env_or_default("PGMONETA_MCP_TEST_PORT", "5002")
+        .parse::<u16>()
+        .expect("PGMONETA_MCP_TEST_PORT must be a number");
+
     if !use_testcontainers() {
-        let host = env_or_default("PGMONETA_MCP_TEST_HOST", "localhost");
-        let port = env_or_default("PGMONETA_MCP_TEST_PORT", "5002")
-            .parse::<i32>()
-            .expect("PGMONETA_MCP_TEST_PORT must be a number");
-        init_config_for_pgmoneta(&host, port);
+        init_config_for_pgmoneta(&host, i32::from(test_port));
         wait_for_pgmoneta(None).await;
         return TestEnv(None);
     }
@@ -170,7 +171,7 @@ pub async fn init_config() -> TestEnv {
         .unwrap_or_else(|_| "pgmoneta-mcp-test-suite".to_string());
     let container = GenericImage::new(image_name.as_str(), "latest")
         .with_exposed_port(5002.tcp())
-        .with_mapped_port(5002, 5002.tcp())
+        .with_mapped_port(test_port, 5002.tcp())
         .with_env_var("PG_DATABASE", env_or_default("PG_DATABASE", "mydb"))
         .with_env_var(
             "PG_DATABASE_ENCODING",
@@ -609,4 +610,46 @@ where
     }
 
     String::from_utf8(decoded).map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_env_or_default_returns_default_when_unset() {
+        let key = "PGMONETA_MCP_NON_EXISTENT_TEST_ENV_VAR_12345";
+        unsafe { std::env::remove_var(key) };
+        assert_eq!(env_or_default(key, "fallback"), "fallback");
+    }
+
+    #[test]
+    fn test_env_or_default_returns_env_when_set() {
+        let key = "PGMONETA_MCP_EXISTENT_TEST_ENV_VAR_12345";
+        unsafe { std::env::set_var(key, "custom_val") };
+        assert_eq!(env_or_default(key, "fallback"), "custom_val");
+        unsafe { std::env::remove_var(key) };
+    }
+
+    #[test]
+    fn test_use_testcontainers_flag() {
+        let key = "PGMONETA_MCP_USE_TESTCONTAINERS";
+        unsafe { std::env::set_var(key, "false") };
+        assert!(!use_testcontainers());
+
+        unsafe { std::env::set_var(key, "0") };
+        assert!(!use_testcontainers());
+
+        unsafe { std::env::set_var(key, "off") };
+        assert!(!use_testcontainers());
+
+        unsafe { std::env::set_var(key, "true") };
+        assert!(use_testcontainers());
+
+        unsafe { std::env::set_var(key, "1") };
+        assert!(use_testcontainers());
+
+        unsafe { std::env::remove_var(key) };
+        assert!(use_testcontainers());
+    }
 }
