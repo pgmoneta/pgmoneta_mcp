@@ -38,6 +38,7 @@ allowed, do not expose the MCP port to untrusted networks.
 | host | | String | Yes | The address of pgmoneta instance |
 | port | | Int | Yes | The port of pgmoneta instance |
 | metrics | 5001 | Int | No | The port of the pgmoneta Prometheus metrics endpoint |
+| operation_timeout | 0 | Int | No | Seconds to wait for pgmoneta to answer a synchronous backup, restore, archive, delete or verify. `0` waits until pgmoneta replies or closes the connection |
 
 ## [llm]
 

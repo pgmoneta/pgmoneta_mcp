@@ -91,6 +91,8 @@ impl ToolBase for RestoreTool {
             Choose the position that best fits. \
             The directory specifies where to restore the backup. \
             Set async to true to return immediately with a job identifier and run the restore in the background. \
+            Without async the call only returns once the restore has finished, which can take a long time on large servers; \
+            for long operations prefer async and follow progress with job_status (command \"restore\"). \
             The username has to be one of the pgmoneta admins to be able to access pgmoneta."
                 .into(),
         )

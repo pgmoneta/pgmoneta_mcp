@@ -363,6 +363,7 @@ pub fn init_config_for_pgmoneta(host: &str, port: i32) {
                 metrics: 5001,
                 compression,
                 encryption,
+                operation_timeout: 0,
             },
             admins,
             llm: None,

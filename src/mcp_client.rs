@@ -54,16 +54,29 @@ impl McpClient {
         Ok(result.tools)
     }
 
-    /// Calls a specific tool with the provided arguments
+    /// Calls a specific tool with the provided arguments.
+    ///
+    /// Synchronous long-running operations (backup, restore, archive, delete,
+    /// verify) are not limited by the client timeout: the server waits for
+    /// pgmoneta according to its own `operation_timeout`.
     pub async fn call_tool(
         &self,
         name: String,
         args: HashMap<String, serde_json::Value>,
     ) -> anyhow::Result<CallToolResult> {
+        let wait_for_operation = is_synchronous_long_running(&name, &args);
         let request = CallToolRequestParams::new(name).with_arguments(args.into_iter().collect());
-        let result = timeout(self.timeout, self.session.call_tool(request))
-            .await
-            .map_err(|_| anyhow::anyhow!("call_tool timed out"))??;
+        let call = self.session.call_tool(request);
+        let result = if wait_for_operation {
+            call.await?
+        } else {
+            timeout(self.timeout, call).await.map_err(|_| {
+                anyhow::anyhow!(
+                    "call_tool timed out after {} seconds",
+                    self.timeout.as_secs()
+                )
+            })??
+        };
         Ok(result)
     }
 
@@ -94,9 +107,35 @@ impl McpClient {
     }
 }
 
+/// Tools whose synchronous call only returns once pgmoneta has finished the work.
+const LONG_RUNNING_TOOLS: &[&str] = &["backup", "restore", "archive", "delete", "verify"];
+
+fn is_synchronous_long_running(name: &str, args: &HashMap<String, serde_json::Value>) -> bool {
+    let asynchronous = args
+        .get("async")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    LONG_RUNNING_TOOLS.contains(&name) && !asynchronous
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_is_synchronous_long_running() {
+        let none = HashMap::new();
+        let sync = HashMap::from([("async".to_string(), serde_json::Value::Bool(false))]);
+        let not_sync = HashMap::from([("async".to_string(), serde_json::Value::Bool(true))]);
+
+        for tool in LONG_RUNNING_TOOLS {
+            assert!(is_synchronous_long_running(tool, &none));
+            assert!(is_synchronous_long_running(tool, &sync));
+            assert!(!is_synchronous_long_running(tool, &not_sync));
+        }
+        assert!(!is_synchronous_long_running("get_info", &none));
+        assert!(!is_synchronous_long_running("job_status", &none));
+    }
 
     #[tokio::test]
     async fn test_connect_scenarios() {

@@ -98,6 +98,25 @@ where
     request: R,
 }
 
+/// How long to wait for the first byte of pgmoneta's reply to a short command.
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(100);
+
+/// pgmoneta did not start answering within the allowed time.
+#[derive(Debug)]
+struct ResponseTimeout(Duration);
+
+impl std::fmt::Display for ResponseTimeout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Reading compression byte timed out after {} seconds",
+            self.0.as_secs()
+        )
+    }
+}
+
+impl std::error::Error for ResponseTimeout {}
+
 /// Handles network communication with the backend pgmoneta server.
 ///
 /// This client manages the lifecycle of a request: building headers,
@@ -115,6 +134,34 @@ impl PgmonetaClient {
         }
 
         Ok(())
+    }
+
+    /// Commands whose synchronous reply only arrives once pgmoneta has finished the work.
+    fn long_running_operation(command: u32) -> Option<&'static str> {
+        match command {
+            Command::BACKUP => Some("backup"),
+            Command::RESTORE => Some("restore"),
+            Command::ARCHIVE => Some("archive"),
+            Command::DELETE => Some("delete"),
+            Command::VERIFY => Some("verify"),
+            _ => None,
+        }
+    }
+
+    /// How long to wait for pgmoneta to start answering. `None` waits until
+    /// pgmoneta replies or closes the connection.
+    fn response_timeout(
+        command: u32,
+        asynchronous: bool,
+        operation_timeout: u64,
+    ) -> Option<Duration> {
+        if asynchronous || Self::long_running_operation(command).is_none() {
+            Some(RESPONSE_TIMEOUT)
+        } else if operation_timeout == 0 {
+            None
+        } else {
+            Some(Duration::from_secs(operation_timeout))
+        }
     }
 
     fn is_known_compression(value: u8) -> bool {
@@ -297,20 +344,23 @@ impl PgmonetaClient {
         Ok(())
     }
 
-    async fn read_response<R>(stream: &mut R) -> anyhow::Result<String>
+    async fn read_response<R>(
+        stream: &mut R,
+        first_byte_timeout: Option<Duration>,
+    ) -> anyhow::Result<String>
     where
         R: tokio::io::AsyncRead + Unpin,
     {
-        // Read compression
-        let compression = match timeout(Duration::from_secs(100), stream.read_u8()).await {
-            Ok(Ok(c)) => c,
-            Ok(Err(e)) => {
-                return Err(anyhow!("Failed to read compression byte: {e}"));
-            }
-            Err(_) => {
-                return Err(anyhow!("Reading compression byte timed out"));
-            }
+        // Read compression. pgmoneta sends nothing until a synchronous
+        // operation has finished, so this wait can be long.
+        let first_byte = match first_byte_timeout {
+            Some(limit) => timeout(limit, stream.read_u8())
+                .await
+                .map_err(|_| ResponseTimeout(limit))?,
+            None => stream.read_u8().await,
         };
+        let compression =
+            first_byte.map_err(|e| anyhow!("Failed to read compression byte: {e}"))?;
 
         if !Self::is_known_compression(compression) {
             tracing::warn!(
@@ -447,13 +497,43 @@ impl PgmonetaClient {
         let encryption = header.encryption;
         let request = PgmonetaRequest { request, header };
 
+        let config = CONFIG.get().expect("Configuration should be enabled");
+        let first_byte_timeout =
+            Self::response_timeout(command, asynchronous, config.pgmoneta.operation_timeout);
+
         let mut stream = Self::connect_to_server(username).await?;
         tracing::debug!(username = username, "Connected to server");
 
         let request_str = serde_json::to_string(&request)?;
         Self::write_request(&request_str, &mut stream, compression, encryption).await?;
         tracing::debug!(username = username, request = ?request, "Sent request to server");
-        Self::read_response(&mut stream).await
+        Self::read_response(&mut stream, first_byte_timeout)
+            .await
+            .map_err(|e| Self::explain_timeout(e, command, asynchronous))
+    }
+
+    /// A timed-out synchronous operation is usually still running in pgmoneta,
+    /// so say so instead of reporting a plain failure.
+    fn explain_timeout(error: anyhow::Error, command: u32, asynchronous: bool) -> anyhow::Error {
+        let timed_out = error.downcast_ref::<ResponseTimeout>().map(|t| t.0);
+        match (timed_out, Self::long_running_operation(command)) {
+            (Some(limit), Some(operation)) if !asynchronous => {
+                let hint = if command == Command::VERIFY {
+                    "check pgmoneta before retrying".to_string()
+                } else {
+                    format!(
+                        "check it with job_status (command \"{operation}\") before retrying, \
+                         or call the tool again with async set to true"
+                    )
+                };
+                anyhow!(
+                    "pgmoneta did not answer the {operation} within {} seconds (operation_timeout). \
+                     The {operation} may still be running in pgmoneta: {hint}.",
+                    limit.as_secs()
+                )
+            }
+            _ => error,
+        }
     }
 }
 
@@ -484,6 +564,7 @@ mod tests {
                     metrics: 5002,
                     compression: "zstd".to_string(),
                     encryption: "aes_256_gcm".to_string(),
+                    operation_timeout: 0,
                 },
                 admins: HashMap::new(),
                 llm: None,
@@ -635,11 +716,65 @@ mod tests {
         buffer.extend_from_slice(response_str.as_bytes());
 
         let mut cursor = Cursor::new(buffer);
-        let result = PgmonetaClient::read_response(&mut cursor)
+        let result = PgmonetaClient::read_response(&mut cursor, Some(RESPONSE_TIMEOUT))
             .await
             .expect("Read should succeed");
 
         assert_eq!(result, response_str);
+    }
+
+    #[test]
+    fn test_response_timeout_for_long_running_operations() {
+        // Synchronous long-running commands follow operation_timeout; 0 means no limit.
+        for command in [
+            Command::BACKUP,
+            Command::RESTORE,
+            Command::ARCHIVE,
+            Command::DELETE,
+            Command::VERIFY,
+        ] {
+            assert_eq!(PgmonetaClient::response_timeout(command, false, 0), None);
+            assert_eq!(
+                PgmonetaClient::response_timeout(command, false, 3600),
+                Some(Duration::from_secs(3600))
+            );
+            // Async requests return a job identifier right away.
+            assert_eq!(
+                PgmonetaClient::response_timeout(command, true, 0),
+                Some(RESPONSE_TIMEOUT)
+            );
+        }
+        assert_eq!(
+            PgmonetaClient::response_timeout(Command::INFO, false, 0),
+            Some(RESPONSE_TIMEOUT)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_read_response_times_out_without_reply() {
+        let (_server, mut client) = tokio::io::duplex(64);
+        let error = PgmonetaClient::read_response(&mut client, Some(Duration::from_millis(50)))
+            .await
+            .expect_err("Read should time out");
+        assert!(error.downcast_ref::<ResponseTimeout>().is_some());
+
+        let message = PgmonetaClient::explain_timeout(error, Command::BACKUP, false).to_string();
+        assert!(message.contains("may still be running"));
+        assert!(message.contains("job_status"));
+        assert!(message.contains("async"));
+    }
+
+    #[test]
+    fn test_explain_timeout_keeps_other_errors() {
+        let error = PgmonetaClient::explain_timeout(anyhow!("boom"), Command::BACKUP, false);
+        assert_eq!(error.to_string(), "boom");
+
+        let error = PgmonetaClient::explain_timeout(
+            ResponseTimeout(RESPONSE_TIMEOUT).into(),
+            Command::INFO,
+            false,
+        );
+        assert!(error.downcast_ref::<ResponseTimeout>().is_some());
     }
 
     #[test]

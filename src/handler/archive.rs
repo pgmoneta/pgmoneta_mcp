@@ -91,6 +91,8 @@ impl ToolBase for ArchiveTool {
             Choose the position that best fits. \
             The directory specifies where to archive the backup. \
             Set async to true to return immediately with a job identifier and run the archive in the background. \
+            Without async the call only returns once the archive has finished, which can take a long time on large servers; \
+            for long operations prefer async and follow progress with job_status (command \"archive\"). \
             The username has to be one of the pgmoneta admins to be able to access pgmoneta."
                 .into(),
         )
