@@ -1668,3 +1668,46 @@ An active job cannot be removed.
 job_remove {"job_id":"s0-backup-20260920123000"}
 job_remove {}
 ```
+
+**Tool: /s3_ls**
+
+List remote S3 objects for a server, with an optional prefix filter.
+
+**Arguments**
+
+- `server` (string, required): Server name configured in pgmoneta.
+- `prefix` (string, optional): S3 key prefix to filter objects.
+
+**Examples**
+
+```text
+s3_ls {"server":"primary"}
+s3_ls {"server":"primary","prefix":"backups/"}
+```
+
+**Tool: /s3_restore**
+
+Restore a backup from S3 storage to a specified directory.
+
+**Arguments**
+
+- `server` (string, required): Server name configured in pgmoneta.
+- `prefix` (string, required): S3 prefix of the backup to restore.
+- `directory` (string, required): Target directory for restore.
+- `current` (boolean, optional): Restore to the first stable checkpoint.
+- `name` (string, optional): Restore to the specified label.
+- `xid` (string, optional): Restore to the specified transaction ID.
+- `time` (string, optional): Restore to the specified timestamp.
+- `lsn` (string, optional): Restore to the specified LSN.
+- `inclusive` (string, optional): Restore inclusively of the specified information.
+- `timeline` (string, optional): Restore to the specified timeline.
+- `action` (string, optional): Action to perform after restore (`pause`, `shutdown`).
+- `primary` (boolean, optional): Indicates cluster setup as primary.
+- `replica` (boolean, optional): Indicates cluster setup as replica.
+
+**Examples**
+
+```text
+s3_restore {"server":"primary","prefix":"backups/20261114","directory":"/tmp/restore","current":true}
+```
+

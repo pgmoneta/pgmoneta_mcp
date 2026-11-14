@@ -98,6 +98,10 @@ impl Command {
     pub const MODE: u32 = 24;
     /// Command to query, list, and remove async jobs.
     pub const JOB: u32 = 26;
+    /// Command to list remote S3 objects.
+    pub const S3_LS: u32 = 200;
+    /// Command to restore a backup from S3.
+    pub const S3_RESTORE: u32 = 201;
 
     /// Translates a numeric management command code into its string representation.
     ///
@@ -133,6 +137,8 @@ impl Command {
             Self::CONF_SET => Ok("conf set"),
             Self::MODE => Ok("mode"),
             Self::JOB => Ok("job"),
+            Self::S3_LS => Ok("s3 ls"),
+            Self::S3_RESTORE => Ok("s3 restore"),
             default => Err(anyhow!("Unrecognized command enum: {default}")),
         }
     }
@@ -423,6 +429,20 @@ impl ManagementError {
     pub const MANAGEMENT_ERROR_MODE_ERROR: u32 = 2804;
     pub const MANAGEMENT_ERROR_MODE_UNKNOWN_ACTION: u32 = 2805;
 
+    pub const MANAGEMENT_ERROR_LIST_S3_NOSERVER: u32 = 2900;
+    pub const MANAGEMENT_ERROR_LIST_S3_NOFORK: u32 = 2901;
+    pub const MANAGEMENT_ERROR_LIST_S3_WORKFLOW: u32 = 2902;
+    pub const MANAGEMENT_ERROR_LIST_S3_JSON_VALUE: u32 = 2903;
+    pub const MANAGEMENT_ERROR_LIST_S3_NETWORK: u32 = 2904;
+    pub const MANAGEMENT_ERROR_LIST_S3_ERROR: u32 = 2905;
+
+    pub const MANAGEMENT_ERROR_RESTORE_S3_NOSERVER: u32 = 3100;
+    pub const MANAGEMENT_ERROR_RESTORE_S3_NOFORK: u32 = 3101;
+    pub const MANAGEMENT_ERROR_RESTORE_S3_WORKFLOW: u32 = 3102;
+    pub const MANAGEMENT_ERROR_RESTORE_S3_NETWORK: u32 = 3103;
+    pub const MANAGEMENT_ERROR_RESTORE_S3_ERROR: u32 = 3104;
+    pub const MANAGEMENT_ERROR_RESTORE_S3_DOWNLOAD: u32 = 3105;
+
     pub const MANAGEMENT_ERROR_JOB_NOSERVER: u32 = 3200;
     pub const MANAGEMENT_ERROR_JOB_NOT_FOUND: u32 = 3201;
     pub const MANAGEMENT_ERROR_JOB_ACTIVE: u32 = 3202;
@@ -636,6 +656,20 @@ impl ManagementError {
             Self::MANAGEMENT_ERROR_MODE_NETWORK => "Mode: network error",
             Self::MANAGEMENT_ERROR_MODE_ERROR => "Mode: error",
             Self::MANAGEMENT_ERROR_MODE_UNKNOWN_ACTION => "Mode: unknown action",
+
+            Self::MANAGEMENT_ERROR_LIST_S3_NOSERVER => "List S3: server not found",
+            Self::MANAGEMENT_ERROR_LIST_S3_NOFORK => "List S3: failed to fork process",
+            Self::MANAGEMENT_ERROR_LIST_S3_WORKFLOW => "List S3: workflow error",
+            Self::MANAGEMENT_ERROR_LIST_S3_JSON_VALUE => "List S3: invalid JSON value",
+            Self::MANAGEMENT_ERROR_LIST_S3_NETWORK => "List S3: network error",
+            Self::MANAGEMENT_ERROR_LIST_S3_ERROR => "List S3: error",
+
+            Self::MANAGEMENT_ERROR_RESTORE_S3_NOSERVER => "S3 restore: server not found",
+            Self::MANAGEMENT_ERROR_RESTORE_S3_NOFORK => "S3 restore: failed to fork process",
+            Self::MANAGEMENT_ERROR_RESTORE_S3_WORKFLOW => "S3 restore: workflow error",
+            Self::MANAGEMENT_ERROR_RESTORE_S3_NETWORK => "S3 restore: network error",
+            Self::MANAGEMENT_ERROR_RESTORE_S3_ERROR => "S3 restore: error",
+            Self::MANAGEMENT_ERROR_RESTORE_S3_DOWNLOAD => "S3 restore: download failed",
 
             Self::MANAGEMENT_ERROR_JOB_NOSERVER => "Job: server not found",
             Self::MANAGEMENT_ERROR_JOB_NOT_FOUND => "Job: job not found",

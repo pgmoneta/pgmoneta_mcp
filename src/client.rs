@@ -28,6 +28,7 @@ mod mode;
 mod ping;
 mod restore;
 mod retention;
+mod s3;
 mod shutdown;
 mod status;
 mod verify;
