@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use super::constant::{LogLevel, LogType};
+use super::constant::{Compression, Encryption, LogLevel, LogType};
 use anyhow::{Context, Result, anyhow, bail};
 use config::{Config, FileFormat};
 use once_cell::sync::OnceCell;
@@ -369,6 +369,12 @@ pub fn default_llm_max_tool_rounds() -> usize {
 }
 
 fn normalize_configuration(mut conf: Configuration) -> anyhow::Result<Configuration> {
+    // Fail at startup on a typo instead of on the first request.
+    Compression::from_config_name(&conf.pgmoneta.compression)
+        .map_err(|e| anyhow!("Invalid [pgmoneta] compression: {e}"))?;
+    Encryption::from_config_name(&conf.pgmoneta.encryption)
+        .map_err(|e| anyhow!("Invalid [pgmoneta] encryption: {e}"))?;
+
     if let Some(llm) = conf.llm.as_mut() {
         normalize_llm_configuration(llm)?;
     }
@@ -693,5 +699,62 @@ mod tests {
 
         let err = load_user_configuration(file.path().to_str().unwrap()).unwrap_err();
         assert!(err.to_string().contains("Invalid section header '[users]'"));
+    }
+
+    fn load_main_configuration(pgmoneta_section: &str) -> anyhow::Result<Configuration> {
+        let mut conf_file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            conf_file,
+            "[pgmoneta_mcp]
+
+[pgmoneta]
+host = localhost
+port = 5002
+{pgmoneta_section}"
+        )
+        .unwrap();
+        let mut users_file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            users_file,
+            "[pgmoneta-mcp-users]
+admin = secret
+"
+        )
+        .unwrap();
+
+        load_configuration(
+            conf_file.path().to_str().unwrap(),
+            users_file.path().to_str().unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_load_configuration_keeps_compression_and_encryption() {
+        let conf = load_main_configuration("compression = lz4\nencryption = none\n").unwrap();
+
+        assert_eq!(conf.pgmoneta.compression, "lz4");
+        assert_eq!(conf.pgmoneta.encryption, "none");
+    }
+
+    #[test]
+    fn test_load_configuration_defaults_to_zstd_and_aes_256_gcm() {
+        let conf = load_main_configuration("").unwrap();
+
+        assert_eq!(conf.pgmoneta.compression, "zstd");
+        assert_eq!(conf.pgmoneta.encryption, "aes_256_gcm");
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_unknown_compression() {
+        let err = load_main_configuration("compression = banana\n").unwrap_err();
+
+        assert!(err.to_string().contains("compression"), "{err}");
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_unknown_encryption() {
+        let err = load_main_configuration("encryption = banana\n").unwrap_err();
+
+        assert!(err.to_string().contains("encryption"), "{err}");
     }
 }

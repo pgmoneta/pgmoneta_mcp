@@ -49,6 +49,12 @@ host
 port
   The port of the pgmoneta instance. Mandatory.
 
+compression
+  The compression used for the traffic to pgmoneta, any of the strings (``none``, ``gzip``, ``zstd``, ``lz4``, ``bzip2``). Default is zstd.
+
+encryption
+  The encryption used for the traffic to pgmoneta, any of the strings (``none``, ``aes_256_gcm``, ``aes_192_gcm``, ``aes_128_gcm``). Default is aes_256_gcm.
+
 REPORTING BUGS
 ==============
 
