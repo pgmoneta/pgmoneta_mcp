@@ -16,6 +16,7 @@
 mod init;
 mod markdown;
 mod natural;
+mod waiting;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use inquire::{Confirm, InquireError, Select};
@@ -965,9 +966,10 @@ fn run_repl(
                         };
 
                         let llm_tools = mcp_tools_to_llm_schema(&tools);
-                        match runtime
-                            .block_on(translate_natural_language(llm, &llm_tools, &request))
-                        {
+                        match runtime.block_on(waiting::wait(
+                            waiting::THINKING,
+                            translate_natural_language(llm, &llm_tools, &request),
+                        )) {
                             Ok(NaturalLanguagePlan::ToolCalls(tool_calls)) => {
                                 let total = tool_calls.len();
                                 for (index, tool_call) in tool_calls.into_iter().enumerate() {
@@ -1576,7 +1578,8 @@ fn execute_tool_command(
         }
     }
 
-    match runtime.block_on(client.call_tool(name.clone(), args)) {
+    let label = waiting::running(&name, &args);
+    match runtime.block_on(waiting::wait(&label, client.call_tool(name.clone(), args))) {
         Ok(result) => {
             let failed = tool_result_failed(&result);
             match mode {
@@ -1597,12 +1600,15 @@ fn execute_tool_command(
                             .filter(|desc| !desc.trim().is_empty())
                             .unwrap_or_else(|| "No description available.".to_string());
                         runtime
-                            .block_on(postprocess_tool_output_markdown(
-                                llm,
-                                request,
-                                &name,
-                                &tool_description,
-                                &base_output,
+                            .block_on(waiting::wait(
+                                waiting::WRITING,
+                                postprocess_tool_output_markdown(
+                                    llm,
+                                    request,
+                                    &name,
+                                    &tool_description,
+                                    &base_output,
+                                ),
                             ))
                             .unwrap_or(base_output)
                     } else {
