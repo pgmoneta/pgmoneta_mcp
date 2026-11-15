@@ -115,6 +115,7 @@ impl<'a, L: LlmClient> Agent<'a, L> {
 
                     // Execute each tool call and append results
                     for tool_call in &tool_calls {
+                        let tool_call_id = &tool_call.id;
                         let tool_name = &tool_call.function.name;
                         let tool_args = &tool_call.function.arguments;
 
@@ -129,14 +130,14 @@ impl<'a, L: LlmClient> Agent<'a, L> {
                         match result {
                             Ok(content) => {
                                 self.history
-                                    .push(ChatMessage::tool_result(tool_name, &content));
+                                    .push(ChatMessage::tool_result(tool_call_id, &content));
                             }
                             Err(e) => {
                                 let error_msg =
                                     format!("Error calling tool '{}': {}", tool_name, e);
                                 tracing::warn!(%error_msg);
                                 self.history
-                                    .push(ChatMessage::tool_result(tool_name, &error_msg));
+                                    .push(ChatMessage::tool_result(tool_call_id, &error_msg));
                             }
                         }
                     }

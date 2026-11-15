@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use super::{ChatMessage, LlmClient, LlmResponse, ToolCall, ToolCallFunction, ToolDefinition};
+use super::{ChatMessage, LlmClient, LlmResponse, ToolCall, ToolDefinition};
 use anyhow::anyhow;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,6 @@ struct OpenAiMessage {
 /// A tool call in the OpenAI response format.
 #[derive(Debug, Deserialize)]
 struct OpenAiToolCall {
-    #[allow(dead_code)]
     id: String,
     #[allow(dead_code)]
     #[serde(rename = "type")]
@@ -261,12 +260,7 @@ impl LlmClient for OpenAiClient {
                     .into_iter()
                     .map(|tc| {
                         let arguments = parse_tool_arguments(&tc.function.arguments)?;
-                        Ok(ToolCall {
-                            function: ToolCallFunction {
-                                name: tc.function.name,
-                                arguments,
-                            },
-                        })
+                        Ok(ToolCall::function(&tc.id, &tc.function.name, arguments))
                     })
                     .collect::<anyhow::Result<Vec<_>>>()?;
                 Ok(LlmResponse::ToolCalls(mapped_calls))

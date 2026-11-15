@@ -3647,12 +3647,11 @@ mod tests {
     #[tokio::test]
     async fn test_translate_natural_language_returns_tool_call() {
         let llm = MockLlm {
-            response: LlmResponse::ToolCalls(vec![pgmoneta_mcp::llm::ToolCall {
-                function: pgmoneta_mcp::llm::ToolCallFunction {
-                    name: "list_backups".to_string(),
-                    arguments: HashMap::from([("server".to_string(), json!("primary"))]),
-                },
-            }]),
+            response: LlmResponse::ToolCalls(vec![pgmoneta_mcp::llm::ToolCall::function(
+                "call_1",
+                "list_backups",
+                HashMap::from([("server".to_string(), json!("primary"))]),
+            )]),
         };
 
         let command = translate_natural_language(
@@ -3675,12 +3674,11 @@ mod tests {
     #[tokio::test]
     async fn test_translate_natural_language_maps_backup_request_to_backup_tool() {
         let llm = MockLlm {
-            response: LlmResponse::ToolCalls(vec![pgmoneta_mcp::llm::ToolCall {
-                function: pgmoneta_mcp::llm::ToolCallFunction {
-                    name: "backup".to_string(),
-                    arguments: HashMap::from([("server".to_string(), json!("primary"))]),
-                },
-            }]),
+            response: LlmResponse::ToolCalls(vec![pgmoneta_mcp::llm::ToolCall::function(
+                "call_2",
+                "backup",
+                HashMap::from([("server".to_string(), json!("primary"))]),
+            )]),
         };
 
         let command = translate_natural_language(
@@ -3704,18 +3702,16 @@ mod tests {
     async fn test_translate_natural_language_returns_multiple_tool_calls_in_order() {
         let llm = MockLlm {
             response: LlmResponse::ToolCalls(vec![
-                pgmoneta_mcp::llm::ToolCall {
-                    function: pgmoneta_mcp::llm::ToolCallFunction {
-                        name: "backup".to_string(),
-                        arguments: HashMap::from([("server".to_string(), json!("primary"))]),
-                    },
-                },
-                pgmoneta_mcp::llm::ToolCall {
-                    function: pgmoneta_mcp::llm::ToolCallFunction {
-                        name: "list_backups".to_string(),
-                        arguments: HashMap::from([("server".to_string(), json!("primary"))]),
-                    },
-                },
+                pgmoneta_mcp::llm::ToolCall::function(
+                    "call_3",
+                    "backup",
+                    HashMap::from([("server".to_string(), json!("primary"))]),
+                ),
+                pgmoneta_mcp::llm::ToolCall::function(
+                    "call_4",
+                    "list_backups",
+                    HashMap::from([("server".to_string(), json!("primary"))]),
+                ),
             ]),
         };
 
@@ -3749,18 +3745,12 @@ mod tests {
     async fn test_translate_natural_language_rejects_unknown_tool_in_multiple_calls() {
         let llm = MockLlm {
             response: LlmResponse::ToolCalls(vec![
-                pgmoneta_mcp::llm::ToolCall {
-                    function: pgmoneta_mcp::llm::ToolCallFunction {
-                        name: "list_backups".to_string(),
-                        arguments: HashMap::from([("server".to_string(), json!("primary"))]),
-                    },
-                },
-                pgmoneta_mcp::llm::ToolCall {
-                    function: pgmoneta_mcp::llm::ToolCallFunction {
-                        name: "does_not_exist".to_string(),
-                        arguments: HashMap::new(),
-                    },
-                },
+                pgmoneta_mcp::llm::ToolCall::function(
+                    "call_5",
+                    "list_backups",
+                    HashMap::from([("server".to_string(), json!("primary"))]),
+                ),
+                pgmoneta_mcp::llm::ToolCall::function("call_6", "does_not_exist", HashMap::new()),
             ]),
         };
 
