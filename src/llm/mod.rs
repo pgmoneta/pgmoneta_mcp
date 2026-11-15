@@ -22,25 +22,47 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 /// Represents a single message in the conversation history.
+///
+/// Serializes to the OpenAI chat-completions message format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     /// The role of the message sender (`system`, `user`, `assistant`, or `tool`).
     pub role: String,
-    /// The text content of the message.
-    pub content: String,
+    /// The text content of the message. `None` for an assistant message that
+    /// only carries tool calls, which serializes as `"content": null`.
+    pub content: Option<String>,
     /// Tool calls requested by the assistant (present when role is `assistant`).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
-    /// The name of the tool that produced this result (present when role is `tool`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_name: Option<String>,
+    /// The id of the tool call this message answers (present when role is `tool`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }
 
 /// A tool call requested by the LLM.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
+    /// The id the LLM assigned to this call; tool results refer back to it.
+    pub id: String,
+    /// The kind of tool call. Always `"function"`.
+    #[serde(rename = "type")]
+    pub call_type: String,
     /// The function invocation details.
     pub function: ToolCallFunction,
+}
+
+impl ToolCall {
+    /// Creates a function tool call.
+    pub fn function(id: &str, name: &str, arguments: HashMap<String, Value>) -> Self {
+        Self {
+            id: id.to_string(),
+            call_type: "function".to_string(),
+            function: ToolCallFunction {
+                name: name.to_string(),
+                arguments,
+            },
+        }
+    }
 }
 
 /// The function name and arguments within a tool call.
@@ -49,7 +71,37 @@ pub struct ToolCallFunction {
     /// Name of the tool/function to call.
     pub name: String,
     /// Arguments as a JSON object (key-value pairs).
+    ///
+    /// The OpenAI format carries arguments as a JSON-encoded string, so this
+    /// field is written as a string and read from either a string or an object.
+    #[serde(
+        serialize_with = "serialize_arguments",
+        deserialize_with = "deserialize_arguments"
+    )]
     pub arguments: HashMap<String, Value>,
+}
+
+fn serialize_arguments<S>(
+    arguments: &HashMap<String, Value>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let encoded = serde_json::to_string(arguments).map_err(serde::ser::Error::custom)?;
+    serializer.serialize_str(&encoded)
+}
+
+fn deserialize_arguments<'de, D>(deserializer: D) -> Result<HashMap<String, Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    match Value::deserialize(deserializer)? {
+        Value::String(s) if s.trim().is_empty() => Ok(HashMap::new()),
+        Value::String(s) => serde_json::from_str(&s).map_err(serde::de::Error::custom),
+        Value::Null => Ok(HashMap::new()),
+        other => serde_json::from_value(other).map_err(serde::de::Error::custom),
+    }
 }
 
 /// A tool definition in the format expected by LLM APIs (OpenAI function-calling schema).
@@ -174,9 +226,9 @@ impl ChatMessage {
     pub fn system(content: &str) -> Self {
         Self {
             role: "system".to_string(),
-            content: content.to_string(),
+            content: Some(content.to_string()),
             tool_calls: None,
-            tool_name: None,
+            tool_call_id: None,
         }
     }
 
@@ -184,9 +236,9 @@ impl ChatMessage {
     pub fn user(content: &str) -> Self {
         Self {
             role: "user".to_string(),
-            content: content.to_string(),
+            content: Some(content.to_string()),
             tool_calls: None,
-            tool_name: None,
+            tool_call_id: None,
         }
     }
 
@@ -194,9 +246,9 @@ impl ChatMessage {
     pub fn assistant_tool_calls(tool_calls: Vec<ToolCall>) -> Self {
         Self {
             role: "assistant".to_string(),
-            content: String::new(),
+            content: None,
             tool_calls: Some(tool_calls),
-            tool_name: None,
+            tool_call_id: None,
         }
     }
 
@@ -204,19 +256,19 @@ impl ChatMessage {
     pub fn assistant(content: &str) -> Self {
         Self {
             role: "assistant".to_string(),
-            content: content.to_string(),
+            content: Some(content.to_string()),
             tool_calls: None,
-            tool_name: None,
+            tool_call_id: None,
         }
     }
 
-    /// Creates a tool result message.
-    pub fn tool_result(tool_name: &str, content: &str) -> Self {
+    /// Creates a tool result message answering the tool call with id `tool_call_id`.
+    pub fn tool_result(tool_call_id: &str, content: &str) -> Self {
         Self {
             role: "tool".to_string(),
-            content: content.to_string(),
+            content: Some(content.to_string()),
             tool_calls: None,
-            tool_name: Some(tool_name.to_string()),
+            tool_call_id: Some(tool_call_id.to_string()),
         }
     }
 }
@@ -226,6 +278,70 @@ mod tests {
     use super::*;
     use crate::handler::PgmonetaHandler;
     use serde_json::json;
+
+    #[test]
+    fn test_tool_round_serializes_to_openai_format() {
+        let call = ToolCall::function(
+            "call_abc",
+            "list_backups",
+            HashMap::from([("server".to_string(), json!("primary"))]),
+        );
+
+        assert_eq!(
+            serde_json::to_value(ChatMessage::assistant_tool_calls(vec![call])).unwrap(),
+            json!({
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": "call_abc",
+                    "type": "function",
+                    "function": {
+                        "name": "list_backups",
+                        "arguments": "{\"server\":\"primary\"}"
+                    }
+                }]
+            })
+        );
+
+        assert_eq!(
+            serde_json::to_value(ChatMessage::tool_result("call_abc", "ok")).unwrap(),
+            json!({
+                "role": "tool",
+                "content": "ok",
+                "tool_call_id": "call_abc"
+            })
+        );
+    }
+
+    #[test]
+    fn test_plain_messages_omit_tool_fields() {
+        assert_eq!(
+            serde_json::to_value(ChatMessage::user("hi")).unwrap(),
+            json!({ "role": "user", "content": "hi" })
+        );
+    }
+
+    #[test]
+    fn test_tool_call_arguments_round_trip() {
+        let call = ToolCall::function(
+            "call_1",
+            "list_backups",
+            HashMap::from([("server".to_string(), json!("primary"))]),
+        );
+        let encoded = serde_json::to_string(&call).unwrap();
+        let decoded: ToolCall = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded.id, "call_1");
+        assert_eq!(decoded.function.arguments["server"], json!("primary"));
+
+        // An object (as some servers send) is accepted as well.
+        let decoded: ToolCall = serde_json::from_value(json!({
+            "id": "call_2",
+            "type": "function",
+            "function": { "name": "list_backups", "arguments": { "server": "primary" } }
+        }))
+        .unwrap();
+        assert_eq!(decoded.function.arguments["server"], json!("primary"));
+    }
 
     #[test]
     fn test_sanitize_tool_description_removes_username_boilerplate() {
