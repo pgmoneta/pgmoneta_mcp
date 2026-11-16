@@ -131,6 +131,41 @@ mod tests {
     }
 
     #[test]
+    fn test_status_details_translates_backups_nested_in_servers() {
+        let response = r#"{
+            "Outcome": {"Status": true, "Command": 8},
+            "Response": {
+                "Servers": [
+                    {
+                        "Server": "primary",
+                        "HotStandbySize": 1048576,
+                        "Backups": [
+                            {
+                                "Backup": "20260101120000",
+                                "BackupSize": 2048,
+                                "Compression": 0,
+                                "Encryption": 1
+                            }
+                        ]
+                    }
+                ]
+            }
+        }"#;
+        let result = PgmonetaHandler::generate_call_tool_result_string(response);
+
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        let server = &parsed["Response"]["Servers"][0];
+        assert_eq!(server["Server"], "primary");
+        assert_eq!(server["HotStandbySize"], "1.00 MB");
+        let backup = &server["Backups"][0];
+        assert_eq!(backup["Backup"], "20260101120000");
+        assert_eq!(backup["BackupSize"], "2.00 KB");
+        assert_eq!(backup["Compression"], "none");
+        assert_eq!(backup["Encryption"], "aes_256_gcm");
+    }
+
+    #[test]
     fn test_status_details_response_with_error() {
         let response = r#"{"Outcome": {"Status": false, "Command": 8, "Error": 1101}}"#;
         let result = PgmonetaHandler::generate_call_tool_result_string(response);

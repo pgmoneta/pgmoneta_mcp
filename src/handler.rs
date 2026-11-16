@@ -147,6 +147,7 @@ impl PgmonetaHandler {
     /// * Formatting byte counts into human-readable file sizes (e.g., KB, MB).
     /// * Converting LSNs (Log Sequence Numbers) into hex strings.
     /// * Translating numeric enum codes (Compression, Encryption, Error) into descriptive strings.
+    /// * Recursing into nested objects and into objects inside arrays at any depth.
     pub(crate) fn _translate_result<'a, M>(map: M) -> anyhow::Result<Map<String, Value>>
     where
         M: IntoIterator<Item = (&'a String, &'a Value)>,
@@ -172,7 +173,6 @@ impl PgmonetaHandler {
             "EndHiLSN",
             "EndLoLSN",
         ];
-        let object_arr_fields = ["Backups"];
         let compression_field = "Compression";
         let encryption_field = "Encryption";
         let command_field = "Command";
@@ -247,16 +247,14 @@ impl PgmonetaHandler {
                 } else {
                     trans_res.insert(key.clone(), value.clone());
                 }
-            } else if object_arr_fields.contains(&key.as_str()) {
-                let mut trans_arr: Vec<Value> = Vec::new();
-                if let Some(arr) = value.as_array() {
-                    for item in arr {
-                        if let Value::Object(object) = item {
-                            let trans_obj = Self::_translate_result(object)?;
-                            trans_arr.push(Value::Object(trans_obj));
-                        } else {
-                            trans_arr.push(item.clone())
-                        }
+            } else if let Some(arr) = value.as_array() {
+                let mut trans_arr: Vec<Value> = Vec::with_capacity(arr.len());
+                for item in arr {
+                    if let Value::Object(object) = item {
+                        let trans_obj = Self::_translate_result(object)?;
+                        trans_arr.push(Value::Object(trans_obj));
+                    } else {
+                        trans_arr.push(item.clone())
                     }
                 }
                 trans_res.insert(key.clone(), Value::from(trans_arr));
