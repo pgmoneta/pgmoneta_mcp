@@ -63,6 +63,17 @@ pub mod hints {
     }
 }
 
+/// Returns the text of an optional argument, or `None` when it is not really set.
+///
+/// AI clients often fill in the optional fields they do not need with an empty
+/// string or the word "null". Both mean "not set", so they are treated the same
+/// as a field that is missing. Surrounding whitespace is removed.
+pub(crate) fn optional_text(value: Option<&str>) -> Option<&str> {
+    value
+        .map(str::trim)
+        .filter(|text| !text.is_empty() && !text.eq_ignore_ascii_case("null"))
+}
+
 /// The core handler for incoming Model Context Protocol (MCP) requests.
 ///
 /// This struct routes MCP tool calls from the client (like an AI model)
@@ -498,5 +509,24 @@ mod tests {
             assert_eq!(hints.read_only_hint, Some(false), "{name}");
             assert!(!hints.is_destructive(), "{name}");
         }
+    }
+
+    #[test]
+    fn test_optional_text_keeps_real_values() {
+        assert_eq!(optional_text(Some("primary")), Some("primary"));
+        assert_eq!(
+            optional_text(Some("  /tmp/restore  ")),
+            Some("/tmp/restore")
+        );
+    }
+
+    #[test]
+    fn test_optional_text_treats_empty_and_null_as_not_set() {
+        assert_eq!(optional_text(None), None);
+        assert_eq!(optional_text(Some("")), None);
+        assert_eq!(optional_text(Some("   ")), None);
+        assert_eq!(optional_text(Some("null")), None);
+        assert_eq!(optional_text(Some(" NULL ")), None);
+        assert_eq!(optional_text(Some("\n")), None);
     }
 }

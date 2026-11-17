@@ -16,7 +16,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::{PgmonetaHandler, hints};
+use super::{PgmonetaHandler, hints, optional_text};
 use crate::client::PgmonetaClient;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
@@ -74,7 +74,7 @@ impl AsyncTool<PgmonetaHandler> for VerifyBackupTool {
         _service: &PgmonetaHandler,
         request: VerifyRequest,
     ) -> Result<String, McpError> {
-        let directory = request.directory.as_deref().unwrap_or("/tmp");
+        let directory = optional_text(request.directory.as_deref()).unwrap_or("/tmp");
         let result: String = PgmonetaClient::request_verify(
             &request.username,
             &request.server,

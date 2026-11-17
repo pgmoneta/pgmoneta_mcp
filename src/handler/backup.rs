@@ -16,7 +16,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::{PgmonetaHandler, hints};
+use super::{PgmonetaHandler, hints, optional_text};
 use crate::client::PgmonetaClient;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
@@ -72,7 +72,7 @@ impl AsyncTool<PgmonetaHandler> for BackupServerTool {
         _service: &PgmonetaHandler,
         request: BackupRequest,
     ) -> Result<String, McpError> {
-        let result = if let Some(backup_id) = &request.backup_id {
+        let result = if let Some(backup_id) = optional_text(request.backup_id.as_deref()) {
             PgmonetaClient::request_backup(
                 &request.username,
                 &request.server,
