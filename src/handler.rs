@@ -187,12 +187,15 @@ impl PgmonetaHandler {
                 }
             } else if key == compression_field {
                 if let Some(compression) = value.as_u64() {
-                    match Compression::translate_compression_enum(compression as u8) {
+                    match u8::try_from(compression)
+                        .map_err(anyhow::Error::from)
+                        .and_then(Compression::translate_compression_enum)
+                    {
                         Ok(compression_str) => {
                             trans_res.insert(key.clone(), Value::from(compression_str));
                         }
                         Err(_) => {
-                            trans_res.insert(key.clone(), Value::from("zstd"));
+                            trans_res.insert(key.clone(), value.clone());
                         }
                     }
                 } else {
@@ -380,8 +383,29 @@ mod tests {
     }
 
     #[test]
-    fn test_translate_result_defaults_unknown_compression_enum_to_zstd() {
+    fn test_translate_result_preserves_unknown_compression_enum() {
         let input = r#"{"Outcome":"success","Compression":18}"#;
+        let result = PgmonetaHandler::generate_call_tool_result_string(input);
+
+        assert!(result.is_ok());
+        let parsed: Map<String, Value> = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed["Compression"], json!(18));
+    }
+
+    #[test]
+    fn test_translate_result_does_not_truncate_out_of_range_compression() {
+        // 258 would wrap to 2 (zstd) with a plain `as u8` cast.
+        let input = r#"{"Outcome":"success","Compression":258}"#;
+        let result = PgmonetaHandler::generate_call_tool_result_string(input);
+
+        assert!(result.is_ok());
+        let parsed: Map<String, Value> = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed["Compression"], json!(258));
+    }
+
+    #[test]
+    fn test_translate_result_translates_known_compression_enum() {
+        let input = r#"{"Outcome":"success","Compression":2}"#;
         let result = PgmonetaHandler::generate_call_tool_result_string(input);
 
         assert!(result.is_ok());
@@ -422,10 +446,7 @@ mod tests {
             parsed["Response"]["Backups"][0]["IncrementalParent"],
             json!("")
         );
-        assert_eq!(
-            parsed["Response"]["Backups"][0]["Compression"],
-            json!("zstd")
-        );
+        assert_eq!(parsed["Response"]["Backups"][0]["Compression"], json!(18));
     }
 
     #[test]
