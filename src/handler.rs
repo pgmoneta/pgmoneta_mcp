@@ -170,7 +170,9 @@ impl PgmonetaHandler {
         let mut trans_res: Map<String, Value> = Map::new();
         for (key, value) in map {
             if value.is_null() {
-                trans_res.insert(key.clone(), Value::from(""));
+                // Keep null as null so "no value" stays distinct from an empty string,
+                // and so fields like `Backups` don't change type (array -> string).
+                trans_res.insert(key.clone(), Value::Null);
             } else if file_size_fields.contains(&key.as_str()) {
                 if let Some(size) = value.as_u64() {
                     let size_str = Utility::format_file_size(size);
@@ -365,7 +367,7 @@ mod tests {
 
         assert!(result.is_ok());
         let parsed: Map<String, Value> = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed["Response"]["Command"], json!(""));
+        assert_eq!(parsed["Response"]["Command"], Value::Null);
     }
 
     #[test]
@@ -375,7 +377,7 @@ mod tests {
 
         assert!(result.is_ok());
         let parsed: Map<String, Value> = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed["Backups"], json!(""));
+        assert_eq!(parsed["Backups"], Value::Null);
         assert_eq!(parsed["Elapsed"], json!(12));
     }
 
@@ -417,10 +419,10 @@ mod tests {
 
         assert!(result.is_ok());
         let parsed: Map<String, Value> = serde_json::from_str(&result.unwrap()).unwrap();
-        assert_eq!(parsed["Response"]["Backups"][0]["Comments"], json!(""));
+        assert_eq!(parsed["Response"]["Backups"][0]["Comments"], Value::Null);
         assert_eq!(
             parsed["Response"]["Backups"][0]["IncrementalParent"],
-            json!("")
+            Value::Null
         );
         assert_eq!(
             parsed["Response"]["Backups"][0]["Compression"],
