@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 use anyhow::{Result, anyhow};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use pgmoneta_mcp::configuration::{self, UserConf};
 use pgmoneta_mcp::security::SecurityUtil;
 use rpassword::prompt_password;
@@ -21,6 +21,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+
+const DEFAULT_PASSWORD_LENGTH: usize = 64;
+const MIN_PASSWORD_LENGTH: usize = 8;
+const MAX_PASSWORD_LENGTH: usize = 1024;
+const PASSWORD_CHARSET: &[u8] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -40,6 +52,18 @@ struct Args {
     /// The password for the user
     #[arg(short = 'P', long)]
     password: Option<String>,
+
+    /// Generate a password
+    #[arg(short = 'g', long, conflicts_with = "password")]
+    generate: bool,
+
+    /// Password length
+    #[arg(short = 'l', long, default_value_t = DEFAULT_PASSWORD_LENGTH)]
+    length: usize,
+
+    /// Output format
+    #[arg(short = 'F', long, value_enum, default_value_t = OutputFormat::Text)]
+    format: OutputFormat,
 
     #[command(subcommand)]
     command: Commands,
@@ -85,34 +109,44 @@ fn main() -> Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow!("Missing required argument: -f, --file <FILE>"))?;
 
-            match action {
-                UserAction::Add => {
-                    let user = args
-                        .user
-                        .as_ref()
-                        .ok_or_else(|| anyhow!("Missing required argument: -U, --user <USER>"))?;
-                    let password = User::get_or_generate_password(args.password.as_deref())?;
-                    User::add_user(file, user, &password)?;
-                }
-                UserAction::Del => {
-                    let user = args
-                        .user
-                        .as_ref()
-                        .ok_or_else(|| anyhow!("Missing required argument: -U, --user <USER>"))?;
-                    User::remove_user(file, user)?;
-                }
-                UserAction::Edit => {
-                    let user = args
-                        .user
-                        .as_ref()
-                        .ok_or_else(|| anyhow!("Missing required argument: -U, --user <USER>"))?;
-                    let password = User::get_or_generate_password(args.password.as_deref())?;
-                    User::edit_user(file, user, &password)?;
-                }
-                UserAction::Ls => {
-                    User::list_users(file)?;
-                }
-            }
+            let response =
+                match action {
+                    UserAction::Add => {
+                        let user = args.user.as_ref().ok_or_else(|| {
+                            anyhow!("Missing required argument: -U, --user <USER>")
+                        })?;
+                        let (password, generated) = User::get_or_generate_password(
+                            args.password.as_deref(),
+                            args.generate,
+                            args.length,
+                        )?;
+                        let mut response = User::add_user(file, user, &password)?;
+                        response.generated_password = generated;
+                        response
+                    }
+                    UserAction::Del => {
+                        let user = args.user.as_ref().ok_or_else(|| {
+                            anyhow!("Missing required argument: -U, --user <USER>")
+                        })?;
+                        User::remove_user(file, user)?
+                    }
+                    UserAction::Edit => {
+                        let user = args.user.as_ref().ok_or_else(|| {
+                            anyhow!("Missing required argument: -U, --user <USER>")
+                        })?;
+                        let (password, generated) = User::get_or_generate_password(
+                            args.password.as_deref(),
+                            args.generate,
+                            args.length,
+                        )?;
+                        let mut response = User::edit_user(file, user, &password)?;
+                        response.generated_password = generated;
+                        response
+                    }
+                    UserAction::Ls => User::list_users(file)?,
+                };
+
+            User::print_response(&response, args.format)?;
         }
     }
 
@@ -121,7 +155,7 @@ fn main() -> Result<()> {
 
 struct User;
 impl User {
-    pub fn add_user(file: &str, user: &str, password: &str) -> Result<()> {
+    pub fn add_user(file: &str, user: &str, password: &str) -> Result<AdminResponse> {
         let path = Path::new(file);
         let sutil = SecurityUtil::new();
         let mut conf: UserConf;
@@ -158,17 +192,15 @@ impl User {
         let conf_str = serde_ini::to_string(&conf)?;
         fs::write(file, &conf_str)?;
 
-        Self::print_response(AdminResponse {
+        Ok(AdminResponse {
             command: "user add".to_string(),
             outcome: "success".to_string(),
             users: Some(vec![user.to_string()]),
             generated_password: None,
-        });
-
-        Ok(())
+        })
     }
 
-    pub fn remove_user(file: &str, user: &str) -> Result<()> {
+    pub fn remove_user(file: &str, user: &str) -> Result<AdminResponse> {
         let path = Path::new(file);
 
         if !path.exists() {
@@ -190,17 +222,15 @@ impl User {
         let conf_str = serde_ini::to_string(&conf)?;
         fs::write(file, &conf_str)?;
 
-        Self::print_response(AdminResponse {
+        Ok(AdminResponse {
             command: "user del".to_string(),
             outcome: "success".to_string(),
             users: Some(vec![user.to_string()]),
             generated_password: None,
-        });
-
-        Ok(())
+        })
     }
 
-    pub fn edit_user(file: &str, user: &str, password: &str) -> Result<()> {
+    pub fn edit_user(file: &str, user: &str, password: &str) -> Result<AdminResponse> {
         let path = Path::new(file);
         let sutil = SecurityUtil::new();
 
@@ -234,27 +264,24 @@ impl User {
         let conf_str = serde_ini::to_string(&conf)?;
         fs::write(file, &conf_str)?;
 
-        Self::print_response(AdminResponse {
+        Ok(AdminResponse {
             command: "user edit".to_string(),
             outcome: "success".to_string(),
             users: Some(vec![user.to_string()]),
             generated_password: None,
-        });
-
-        Ok(())
+        })
     }
 
-    pub fn list_users(file: &str) -> Result<()> {
+    pub fn list_users(file: &str) -> Result<AdminResponse> {
         let path = Path::new(file);
 
         if !path.exists() {
-            Self::print_response(AdminResponse {
+            return Ok(AdminResponse {
                 command: "user ls".to_string(),
                 outcome: "success".to_string(),
                 users: Some(vec![]),
                 generated_password: None,
             });
-            return Ok(());
         }
 
         let conf = configuration::load_user_configuration(file)?;
@@ -263,19 +290,39 @@ impl User {
             .unwrap_or_default();
         users.sort_unstable();
 
-        Self::print_response(AdminResponse {
+        Ok(AdminResponse {
             command: "user ls".to_string(),
             outcome: "success".to_string(),
             users: Some(users),
             generated_password: None,
-        });
-
-        Ok(())
+        })
     }
 
-    fn get_or_generate_password(password: Option<&str>) -> Result<String> {
+    fn generate_password(length: usize) -> Result<String> {
+        if !(MIN_PASSWORD_LENGTH..=MAX_PASSWORD_LENGTH).contains(&length) {
+            return Err(anyhow!(
+                "Password length must be between {} and {}",
+                MIN_PASSWORD_LENGTH,
+                MAX_PASSWORD_LENGTH
+            ));
+        }
+        Ok((0..length)
+            .map(|_| PASSWORD_CHARSET[rand::random_range(0..PASSWORD_CHARSET.len())] as char)
+            .collect())
+    }
+
+    fn get_or_generate_password(
+        password: Option<&str>,
+        generate: bool,
+        length: usize,
+    ) -> Result<(String, Option<String>)> {
+        if generate {
+            let pwd = Self::generate_password(length)?;
+            return Ok((pwd.clone(), Some(pwd)));
+        }
+
         if let Some(pwd) = password {
-            return Ok(pwd.to_string());
+            return Ok((pwd.to_string(), None));
         }
 
         let pwd = prompt_password("Password: ")?;
@@ -285,23 +332,29 @@ impl User {
             return Err(anyhow!("Passwords do not match"));
         }
 
-        Ok(pwd)
+        Ok((pwd, None))
     }
 
-    fn print_response(response: AdminResponse) {
-        println!("Command: {}", response.command);
-        println!("Outcome: {}", response.outcome);
-        if let Some(users) = &response.users
-            && !users.is_empty()
-        {
-            println!("Users:");
-            for user in users {
-                println!("  - {}", user);
+    fn print_response(response: &AdminResponse, format: OutputFormat) -> Result<()> {
+        match format {
+            OutputFormat::Json => println!("{}", serde_json::to_string_pretty(response)?),
+            OutputFormat::Text => {
+                println!("Command: {}", response.command);
+                println!("Outcome: {}", response.outcome);
+                if let Some(users) = &response.users
+                    && !users.is_empty()
+                {
+                    println!("Users:");
+                    for user in users {
+                        println!("  - {}", user);
+                    }
+                }
+                if let Some(pwd) = &response.generated_password {
+                    println!("Generated password: {}", pwd);
+                }
             }
         }
-        if let Some(pwd) = &response.generated_password {
-            println!("Generated password: {}", pwd);
-        }
+        Ok(())
     }
 }
 
@@ -325,6 +378,32 @@ mod tests {
                 .write_master_key("test_master_pass", &[0u8; 16])
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn test_generate_password_length_and_charset() {
+        let pwd = User::generate_password(64).unwrap();
+        assert_eq!(pwd.len(), 64);
+        assert!(pwd.bytes().all(|b| PASSWORD_CHARSET.contains(&b)));
+    }
+
+    #[test]
+    fn test_generate_password_rejects_invalid_length() {
+        assert!(User::generate_password(MIN_PASSWORD_LENGTH - 1).is_err());
+        assert!(User::generate_password(MAX_PASSWORD_LENGTH + 1).is_err());
+    }
+
+    #[test]
+    fn test_get_or_generate_password_generates() {
+        let (pwd, generated) = User::get_or_generate_password(None, true, 32).unwrap();
+        assert_eq!(pwd.len(), 32);
+        assert_eq!(generated.as_deref(), Some(pwd.as_str()));
+    }
+
+    #[test]
+    fn test_generate_conflicts_with_password() {
+        let res = Args::try_parse_from(["pgmoneta-mcp-admin", "-g", "-P", "x", "user", "add"]);
+        assert!(res.is_err());
     }
 
     #[test]
