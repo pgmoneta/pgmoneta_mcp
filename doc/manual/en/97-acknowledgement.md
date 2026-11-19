@@ -24,6 +24,7 @@ Omar Ahmed <omar.ahmed75566@gmail.com>
 Mohamed Elsyed <2305273@anu.edu.eg>
 Mohamed Kamal <raynowing007@gmail.com>
 Manish Kumar <manishpatel953249@gmail.com>
+Shahmeer Abdullah <shahmeerabdullah83@gmail.com>
 ```
 
 ## Committers
