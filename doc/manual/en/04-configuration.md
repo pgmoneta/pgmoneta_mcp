@@ -220,6 +220,7 @@ Named client LLM profiles use the same keys as `[llm]`:
 | `endpoint` | Yes | - | OpenAI API URL |
 | `model` | Yes | - | Model identifier |
 | `max_tool_rounds` | No | `10` | Maximum tool-calling iterations per prompt |
+| `timeout` | No | `300` | Seconds to wait for the LLM server to answer a request. `0` waits without limit |
 
 For user workflows, see [Client](50-client.md).
 

@@ -435,6 +435,7 @@ The section name is the profile name exposed by `/model [name]` and Tab completi
 | `endpoint` | Yes | OpenAI API URL, normally ending in `/v1` |
 | `model` | Yes | Model identifier used for tool selection |
 | `max_tool_rounds` | No | Accepted for compatibility with the shared LLM config block. Default: `10` |
+| `timeout` | No | Seconds to wait for the LLM server to answer a request. `0` waits without limit. Default: `300` |
 
 Run the interactive client:
 

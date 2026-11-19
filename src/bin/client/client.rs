@@ -514,7 +514,11 @@ fn main() -> Result<()> {
         .map(|(name, configuration)| {
             (
                 name.clone(),
-                OpenAiClient::new(&configuration.endpoint, &configuration.model),
+                OpenAiClient::new(
+                    &configuration.endpoint,
+                    &configuration.model,
+                    configuration.timeout,
+                ),
             )
         })
         .collect::<HashMap<_, _>>();

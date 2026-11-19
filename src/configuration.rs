@@ -165,6 +165,10 @@ pub struct LlmConfiguration {
     /// Maximum number of tool-calling rounds per user prompt. Default: `10`.
     #[serde(default = "default_llm_max_tool_rounds")]
     pub max_tool_rounds: usize,
+    /// Seconds to wait for the LLM server to answer a request. `0` disables
+    /// the limit. Default: `300`.
+    #[serde(default = "default_llm_timeout")]
+    pub timeout: u64,
 }
 
 /// Configuration properties for the inspector.
@@ -368,6 +372,10 @@ pub fn default_llm_max_tool_rounds() -> usize {
     10
 }
 
+pub fn default_llm_timeout() -> u64 {
+    300
+}
+
 fn normalize_configuration(mut conf: Configuration) -> anyhow::Result<Configuration> {
     if let Some(llm) = conf.llm.as_mut() {
         normalize_llm_configuration(llm)?;
@@ -449,6 +457,17 @@ fn parse_client_llm_profiles(
                 })?,
                 None => default_llm_max_tool_rounds(),
             };
+            let timeout = match values.get("timeout") {
+                Some(value) => value.trim().parse::<u64>().map_err(|e| {
+                    anyhow!(
+                        "Invalid timeout '{}' for client LLM profile '{}': {}",
+                        value,
+                        name,
+                        e
+                    )
+                })?,
+                None => default_llm_timeout(),
+            };
 
             Ok((
                 name,
@@ -456,6 +475,7 @@ fn parse_client_llm_profiles(
                     endpoint,
                     model,
                     max_tool_rounds,
+                    timeout,
                 },
             ))
         })
@@ -500,7 +520,7 @@ mod tests {
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(
             file,
-            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\ntimeout = 15\n\n[llm]\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\nmax_tool_rounds = 7\n"
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\ntimeout = 15\n\n[llm]\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\nmax_tool_rounds = 7\ntimeout = 120\n"
         )
         .unwrap();
 
@@ -514,6 +534,28 @@ mod tests {
         assert_eq!(llm.endpoint, "http://localhost:8100/v1");
         assert_eq!(llm.model, "ggml-org/gemma-4-E4B-it-GGUF");
         assert_eq!(llm.max_tool_rounds, 7);
+        assert_eq!(llm.timeout, 120);
+    }
+
+    #[test]
+    fn test_load_client_configuration_llm_timeout() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\n\n[llm]\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\n"
+        )
+        .unwrap();
+        let conf = load_client_configuration(file.path().to_str().unwrap()).unwrap();
+        assert_eq!(conf.llms.get("llm").unwrap().timeout, 300);
+
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            "[pgmoneta_mcp_client]\nurl = http://localhost:8000/mcp\n\n[llm]\nendpoint = http://localhost:8100/v1\nmodel = ggml-org/gemma-4-E4B-it-GGUF\ntimeout = soon\n"
+        )
+        .unwrap();
+        let err = load_client_configuration(file.path().to_str().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("Invalid timeout 'soon'"));
     }
 
     #[test]
