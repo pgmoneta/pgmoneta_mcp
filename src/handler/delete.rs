@@ -57,6 +57,8 @@ impl ToolBase for DeleteTool {
             Requires the server name, backup identifier, and an optional force flag. \
             \"newest\", \"latest\" or \"oldest\" are also accepted as backup identifier. \
             Set async to true to return immediately with a job identifier and run the deletion in the background. \
+            Without async the call only returns once the deletion has finished, which can take a long time on large servers; \
+            for long operations prefer async and follow progress with job_status (command \"delete\"). \
             The username has to be one of the pgmoneta admins to be able to access pgmoneta."
                 .into(),
         )

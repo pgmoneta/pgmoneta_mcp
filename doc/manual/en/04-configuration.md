@@ -137,6 +137,7 @@ server.
 | `host` | - | String | Yes | The address of the pgmoneta instance |
 | `port` | - | Int | Yes | The port of the pgmoneta instance |
 | `metrics` | `5001` | Int | No | The port of the pgmoneta Prometheus metrics endpoint |
+| `operation_timeout` | `0` | Int | No | Seconds to wait for pgmoneta to answer a synchronous backup, restore, archive, delete or verify. `0` waits until pgmoneta replies or closes the connection |
 
 The management `port` must match pgmoneta's `management` setting. The `metrics`
 port is separate and should match pgmoneta's Prometheus metrics endpoint.

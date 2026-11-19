@@ -57,6 +57,8 @@ impl ToolBase for BackupServerTool {
             If the backup identifier is not provided, a full backup will be created. \
             If the backup identifier is provided, an incremental backup will be created. \
             Set async to true to return immediately with a job identifier and run the backup in the background. \
+            Without async the call only returns once the backup has finished, which can take a long time on large servers; \
+            for long operations prefer async and follow progress with job_status (command \"backup\"). \
             The username has to be one of the pgmoneta admins to be able to access pgmoneta."
                 .into(),
         )

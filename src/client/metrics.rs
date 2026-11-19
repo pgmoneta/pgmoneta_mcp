@@ -132,6 +132,7 @@ mod tests {
                 metrics: 5001,
                 compression: "zstd".to_string(),
                 encryption: "aes_256_gcm".to_string(),
+                operation_timeout: 0,
             },
             admins: HashMap::new(),
             llm: None,

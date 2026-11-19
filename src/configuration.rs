@@ -111,6 +111,11 @@ pub struct PgmonetaConfiguration {
     /// Default: "aes_256_gcm".
     #[serde(default = "default_encryption")]
     pub encryption: String,
+    /// Seconds to wait for pgmoneta to answer a synchronous long-running
+    /// operation (backup, restore, archive, delete, verify).
+    /// `0` waits until pgmoneta replies or closes the connection. Default: 0.
+    #[serde(default = "default_operation_timeout")]
+    pub operation_timeout: u64,
 }
 
 /// Configuration properties for the MCP server itself.
@@ -476,6 +481,10 @@ pub fn default_metrics_port() -> i32 {
 
 pub fn default_timeout() -> u64 {
     30
+}
+
+pub fn default_operation_timeout() -> u64 {
+    0
 }
 
 pub fn write_config_file(content: &str, file_name: &str, dir: PathBuf) -> Result<String> {
