@@ -28,6 +28,7 @@ pub mod mode;
 pub mod ping;
 pub mod restore;
 pub mod retention;
+pub mod s3;
 pub mod shutdown;
 pub mod status;
 pub mod verify;
@@ -121,6 +122,8 @@ impl PgmonetaHandler {
             .with_async_tool::<verify::VerifyBackupTool>()
             .with_async_tool::<delete::DeleteTool>()
             .with_async_tool::<status::StatusTool>()
+            .with_async_tool::<s3::S3LsTool>()
+            .with_async_tool::<s3::S3RestoreTool>()
     }
 }
 
@@ -172,7 +175,7 @@ impl PgmonetaHandler {
             "EndHiLSN",
             "EndLoLSN",
         ];
-        let object_arr_fields = ["Backups"];
+        let object_arr_fields = ["Backups", "S3Objects"];
         let compression_field = "Compression";
         let encryption_field = "Encryption";
         let command_field = "Command";
@@ -509,6 +512,7 @@ mod tests {
             "job_list_all",
             "job_list_server",
             "job_list_status",
+            "s3_ls",
         ] {
             assert_eq!(annotations(name).read_only_hint, Some(true), "{name}");
         }
@@ -521,6 +525,7 @@ mod tests {
             "clear",
             "conf_set",
             "job_remove",
+            "s3_restore",
         ] {
             let hints = annotations(name);
             assert_eq!(hints.read_only_hint, Some(false), "{name}");

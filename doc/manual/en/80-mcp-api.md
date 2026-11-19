@@ -121,9 +121,9 @@ that change something, and warn before running the latter:
 
 | Group | Tools |
 | :---- | :---- |
-| Read-only | `get_info`, `list_backups`, `status`, `ping`, `conf_ls`, `conf_get`, `get_metrics`, `metric`, `job`, `job_status`, `job_list_all`, `job_list_server`, `job_list_status` |
+| Read-only | `get_info`, `list_backups`, `status`, `ping`, `conf_ls`, `conf_get`, `get_metrics`, `metric`, `job`, `job_status`, `job_list_all`, `job_list_server`, `job_list_status`, `s3_ls` |
 | Changes something, nothing is lost | `backup`, `archive`, `verify`, `retain`, `set_mode`, `conf_reload` |
-| Destructive | `delete`, `expunge`, `restore`, `shutdown`, `clear`, `conf_set`, `annotate_backup`, `compress`, `decompress`, `encrypt`, `decrypt`, `job_remove` |
+| Destructive | `delete`, `expunge`, `restore`, `shutdown`, `clear`, `conf_set`, `annotate_backup`, `compress`, `decompress`, `encrypt`, `decrypt`, `job_remove`, `s3_restore` |
 
 `retain`, `expunge`, `set_mode`, `conf_set` and `conf_reload` also set
 `idempotentHint`, since running them again with the same arguments changes
@@ -663,6 +663,61 @@ pgmoneta_retention_server{server="standby"} 14
   "arguments": {
     "username": "admin",
     "in_details": false
+  }
+}
+```
+
+**s3_ls**
+
+**Description**: Lists remote S3 objects for a server, with an optional prefix filter.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `server` (string, required): Server name as configured in pgmoneta
+- `prefix` (string, optional): S3 key prefix filter
+
+**Example**:
+```json
+{
+  "tool": "s3_ls",
+  "arguments": {
+    "username": "admin",
+    "server": "primary",
+    "prefix": "backups/"
+  }
+}
+```
+
+**s3_restore**
+
+**Description**: Restores a backup from S3 storage to a specified directory.
+
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `server` (string, required): Server name as configured in pgmoneta
+- `prefix` (string, required): S3 prefix of the backup to restore
+- `directory` (string, required): Target directory for restore
+- `current` (boolean, optional): Restore to the first stable checkpoint
+- `name` (string, optional): Restore to the specified label
+- `xid` (string, optional): Restore to the specified transaction ID
+- `time` (string, optional): Restore to the specified timestamp
+- `lsn` (string, optional): Restore to the specified LSN
+- `inclusive` (string, optional): Restore inclusively of the specified information
+- `timeline` (string, optional): Restore to the specified timeline
+- `action` (string, optional): Action to perform after restore (`pause`, `shutdown`)
+- `primary` (boolean, optional): Indicates cluster setup as primary
+- `replica` (boolean, optional): Indicates cluster setup as replica
+
+**Example**:
+```json
+{
+  "tool": "s3_restore",
+  "arguments": {
+    "username": "admin",
+    "server": "primary",
+    "prefix": "backups/20261114",
+    "directory": "/tmp/restore",
+    "current": true
   }
 }
 ```
