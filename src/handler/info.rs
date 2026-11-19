@@ -16,7 +16,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::{PgmonetaHandler, hints};
+use super::{PgmonetaHandler, hints, optional_text};
 use crate::client::PgmonetaClient;
 use crate::constant::Sort;
 use rmcp::ErrorData as McpError;
@@ -145,17 +145,9 @@ impl AsyncTool<PgmonetaHandler> for ListBackupsTool {
 }
 
 fn normalize_sort_option(sort: Option<String>) -> String {
-    match sort {
-        Some(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
-                Sort::ASC.to_string()
-            } else {
-                trimmed.to_string()
-            }
-        }
-        None => Sort::ASC.to_string(),
-    }
+    optional_text(sort.as_deref())
+        .unwrap_or(Sort::ASC)
+        .to_string()
 }
 
 #[cfg(test)]

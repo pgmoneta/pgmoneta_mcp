@@ -16,7 +16,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use super::{PgmonetaHandler, hints};
+use super::{PgmonetaHandler, hints, optional_text};
 use crate::client::PgmonetaClient;
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::router::tool::{AsyncTool, ToolBase};
@@ -146,26 +146,19 @@ fn normalize_position(req: &RestoreRequest) -> String {
     {
         result.push("replica".to_string());
     }
-    if let Some(name) = &req.name {
-        result.push(format!("name={}", name));
-    }
-    if let Some(xid) = &req.xid {
-        result.push(format!("xid={}", xid));
-    }
-    if let Some(time) = &req.time {
-        result.push(format!("time={}", time));
-    }
-    if let Some(lsn) = &req.lsn {
-        result.push(format!("lsn={}", lsn));
-    }
-    if let Some(inclusive) = &req.inclusive {
-        result.push(format!("inclusive={}", inclusive));
-    }
-    if let Some(timeline) = &req.timeline {
-        result.push(format!("timeline={}", timeline));
-    }
-    if let Some(action) = &req.action {
-        result.push(format!("action={}", action));
+    let fields = [
+        ("name", &req.name),
+        ("xid", &req.xid),
+        ("time", &req.time),
+        ("lsn", &req.lsn),
+        ("inclusive", &req.inclusive),
+        ("timeline", &req.timeline),
+        ("action", &req.action),
+    ];
+    for (key, value) in fields {
+        if let Some(value) = optional_text(value.as_deref()) {
+            result.push(format!("{key}={value}"));
+        }
     }
 
     let position = result.join(",");
@@ -299,5 +292,40 @@ mod tests {
             outcome.get("Error").unwrap(),
             "Restore: no backup available"
         );
+    }
+
+    #[test]
+    fn test_normalize_position_ignores_empty_and_null_values() {
+        let req = RestoreRequest {
+            username: "user".to_string(),
+            server: "server".to_string(),
+            backup_id: "backup".to_string(),
+            directory: "/tmp/restore".to_string(),
+            name: Some("".to_string()),
+            xid: Some("null".to_string()),
+            time: Some("  ".to_string()),
+            lsn: Some("NULL".to_string()),
+            inclusive: Some("".to_string()),
+            timeline: Some("null".to_string()),
+            action: Some("".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(normalize_position(&req), "current");
+    }
+
+    #[test]
+    fn test_normalize_position_keeps_real_values_next_to_empty_ones() {
+        let req = RestoreRequest {
+            username: "user".to_string(),
+            server: "server".to_string(),
+            backup_id: "backup".to_string(),
+            directory: "/tmp/restore".to_string(),
+            name: Some("".to_string()),
+            xid: Some("1234".to_string()),
+            time: Some("null".to_string()),
+            action: Some(" pause ".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(normalize_position(&req), "xid=1234,action=pause");
     }
 }
