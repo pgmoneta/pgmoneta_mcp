@@ -18,6 +18,7 @@ use anyhow::anyhow;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 
 /// Client for communicating with an OpenAI API server.
 ///
@@ -28,10 +29,14 @@ pub struct OpenAiClient {
     http_client: Client,
     endpoint: String,
     model: String,
+    timeout: Option<Duration>,
 }
 
 /// Name used in log and error messages.
 const LLM_NAME: &str = "OpenAI";
+
+/// How long to wait for the TCP/TLS connection to the inference server.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn normalize_openai_endpoint(endpoint: &str) -> String {
     let endpoint = endpoint.trim_end_matches('/');
@@ -121,12 +126,39 @@ impl OpenAiClient {
     /// # Arguments
     /// * `endpoint` - The base URL of the inference server (e.g., `http://localhost:8080`).
     /// * `model` - The model ID or name to include in chat requests.
-    pub fn new(endpoint: &str, model: &str) -> Self {
+    /// * `timeout_secs` - Seconds to wait for a complete answer to a request; `0` means no limit.
+    pub fn new(endpoint: &str, model: &str, timeout_secs: u64) -> Self {
+        let timeout = (timeout_secs > 0).then(|| Duration::from_secs(timeout_secs));
+
+        let mut builder = Client::builder().connect_timeout(CONNECT_TIMEOUT);
+        if let Some(limit) = timeout {
+            builder = builder.timeout(limit);
+        }
+
         Self {
-            http_client: Client::new(),
+            http_client: builder
+                .build()
+                .expect("failed to build the HTTP client for the LLM server"),
             endpoint: normalize_openai_endpoint(endpoint),
             model: model.to_string(),
+            timeout,
         }
+    }
+
+    /// Turns a reqwest error into a readable message. A timeout names the
+    /// configured limit; any other error is reported as `context: error`.
+    fn request_error(&self, error: reqwest::Error, context: &str) -> anyhow::Error {
+        if error.is_timeout()
+            && let Some(limit) = self.timeout
+        {
+            return anyhow!(
+                "{} at {} did not answer within {} seconds (timeout)",
+                LLM_NAME,
+                self.endpoint,
+                limit.as_secs()
+            );
+        }
+        anyhow!("{}: {}", context, error)
     }
 
     /// Checks whether the inference server is running and reachable.
@@ -229,7 +261,9 @@ impl LlmClient for OpenAiClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| anyhow!("Failed to send chat request to {}: {}", LLM_NAME, e))?;
+            .map_err(|e| {
+                self.request_error(e, &format!("Failed to send chat request to {}", LLM_NAME))
+            })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -242,10 +276,9 @@ impl LlmClient for OpenAiClient {
             ));
         }
 
-        let chat_resp: OpenAiChatResponse = resp
-            .json()
-            .await
-            .map_err(|e| anyhow!("Failed to parse {} chat response: {}", LLM_NAME, e))?;
+        let chat_resp: OpenAiChatResponse = resp.json().await.map_err(|e| {
+            self.request_error(e, &format!("Failed to parse {} chat response", LLM_NAME))
+        })?;
 
         let message = chat_resp
             .choices
@@ -353,14 +386,42 @@ mod tests {
     /// Verifies the OpenAiClient is constructed correctly and trims trailing slashes.
     #[test]
     fn test_client_construction() {
-        let client = OpenAiClient::new("http://localhost:8080/", "my-model");
+        let client = OpenAiClient::new("http://localhost:8080/", "my-model", 300);
         assert_eq!(client.endpoint(), "http://localhost:8080");
         assert_eq!(client.model(), "my-model");
+        assert_eq!(client.timeout, Some(Duration::from_secs(300)));
+
+        let client = OpenAiClient::new("http://localhost:8080/", "my-model", 0);
+        assert_eq!(client.timeout, None);
+    }
+
+    /// A server that accepts the connection but never answers must not hang the client.
+    #[tokio::test]
+    async fn test_chat_times_out_when_server_never_answers() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            // Accept and hold the connection open without ever responding.
+            let (_socket, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+
+        let client = OpenAiClient::new(&format!("http://{}", address), "my-model", 1);
+        let result = tokio::time::timeout(
+            Duration::from_secs(10),
+            client.chat(&[ChatMessage::user("hello")], &[]),
+        )
+        .await
+        .expect("chat should give up on its own, not hang");
+
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("within 1 seconds"), "{}", message);
+        server.abort();
     }
 
     #[test]
     fn test_client_construction_normalizes_v1_suffix() {
-        let client = OpenAiClient::new("http://localhost:8100/v1", "my-model");
+        let client = OpenAiClient::new("http://localhost:8100/v1", "my-model", 300);
         assert_eq!(client.endpoint(), "http://localhost:8100");
         assert_eq!(client.model(), "my-model");
     }

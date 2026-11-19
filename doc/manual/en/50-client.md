@@ -56,6 +56,7 @@ name is what you use with `/model`.
 | `endpoint` | Yes | OpenAI API URL, normally ending in `/v1`. |
 | `model` | Yes | Model name or ID used for tool selection. |
 | `max_tool_rounds` | No | Maximum tool-calling iterations per prompt. Defaults to `10`. |
+| `timeout` | No | Seconds to wait for the LLM server to answer a request. `0` waits without limit. Defaults to `300`. |
 
 Start the client:
 
