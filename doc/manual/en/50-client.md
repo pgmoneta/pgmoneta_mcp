@@ -85,6 +85,20 @@ choose the matching tool and JSON arguments, executes the tool, and renders the
 result. When the request is a general question or cannot be fulfilled using the
 available tools, the model answers directly in markdown.
 
+While it waits, the client shows what it is doing and for how long on a line
+of its own:
+
+``` text
+⠋ Thinking 4s
+⠙ Running delete on primary 12s
+```
+
+`Thinking` is the model choosing a tool, `Running` is the tool running against
+pgmoneta and `Writing the reply` is the model turning the result into the
+answer. The line is removed before the answer, a question or an error is
+printed, and it is not drawn when the output goes to a pipe or a file.
+Developer mode shows it while a tool runs.
+
 With `confirm = on` in `[pgmoneta_mcp_client]`, the client asks before running a
 tool that changes something, such as `backup`, `delete` or `restore`. It shows
 what the model picked first:
