@@ -137,9 +137,15 @@ server.
 | `host` | - | String | Yes | The address of the pgmoneta instance |
 | `port` | - | Int | Yes | The port of the pgmoneta instance |
 | `metrics` | `5001` | Int | No | The port of the pgmoneta Prometheus metrics endpoint |
+| `compression` | `zstd` | String | No | Compression of the traffic to pgmoneta: `none`, `gzip`, `zstd`, `lz4` or `bzip2` |
+| `encryption` | `aes_256_gcm` | String | No | Encryption of the traffic to pgmoneta: `none`, `aes_256_gcm`, `aes_192_gcm` or `aes_128_gcm` |
 
 The management `port` must match pgmoneta's `management` setting. The `metrics`
 port is separate and should match pgmoneta's Prometheus metrics endpoint.
+
+The `compression` and `encryption` values are used for every request sent to
+pgmoneta. The server refuses to start if either value is not one of the listed
+options.
 
 ## Section: `[llm]`
 

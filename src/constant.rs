@@ -211,6 +211,27 @@ impl Compression {
             default => Err(anyhow!("Unrecognized compression enum: {default}")),
         }
     }
+
+    /// Parses a compression name from the configuration file.
+    ///
+    /// Matching ignores case, and `-` and `_` are treated the same. Only the
+    /// algorithms the MCP server can apply itself are accepted, so the
+    /// server-side variants are not valid here.
+    ///
+    /// # Returns
+    /// Returns the numeric code, or an error naming the unsupported value.
+    pub fn from_config_name(name: &str) -> anyhow::Result<u8> {
+        match name.trim().to_lowercase().replace('-', "_").as_str() {
+            "none" => Ok(Self::NONE),
+            "gzip" => Ok(Self::GZIP),
+            "zstd" => Ok(Self::ZSTD),
+            "lz4" => Ok(Self::LZ4),
+            "bzip2" => Ok(Self::BZIP2),
+            other => Err(anyhow!(
+                "Unsupported compression '{other}'. Supported values: none, gzip, zstd, lz4, bzip2"
+            )),
+        }
+    }
 }
 
 impl Encryption {
@@ -237,6 +258,24 @@ impl Encryption {
             Encryption::AES_192_GCM => Ok("aes_192_gcm"),
             Encryption::AES_128_GCM => Ok("aes_128_gcm"),
             default => Err(anyhow!("Unrecognized encryption enum: {default}")),
+        }
+    }
+
+    /// Parses an encryption name from the configuration file.
+    ///
+    /// Matching ignores case, and `-` and `_` are treated the same.
+    ///
+    /// # Returns
+    /// Returns the numeric code, or an error naming the unsupported value.
+    pub fn from_config_name(name: &str) -> anyhow::Result<u8> {
+        match name.trim().to_lowercase().replace('-', "_").as_str() {
+            "none" => Ok(Self::NONE),
+            "aes_256_gcm" => Ok(Self::AES_256_GCM),
+            "aes_192_gcm" => Ok(Self::AES_192_GCM),
+            "aes_128_gcm" => Ok(Self::AES_128_GCM),
+            other => Err(anyhow!(
+                "Unsupported encryption '{other}'. Supported values: none, aes_256_gcm, aes_192_gcm, aes_128_gcm"
+            )),
         }
     }
 }
@@ -688,4 +727,83 @@ impl LogMode {
     pub const APPEND: &str = "append";
     /// Overwrite or create a new log file.
     pub const CREATE: &str = "create";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compression_from_config_name_accepts_supported_values() {
+        assert_eq!(
+            Compression::from_config_name("none").unwrap(),
+            Compression::NONE
+        );
+        assert_eq!(
+            Compression::from_config_name("gzip").unwrap(),
+            Compression::GZIP
+        );
+        assert_eq!(
+            Compression::from_config_name("zstd").unwrap(),
+            Compression::ZSTD
+        );
+        assert_eq!(
+            Compression::from_config_name("lz4").unwrap(),
+            Compression::LZ4
+        );
+        assert_eq!(
+            Compression::from_config_name("bzip2").unwrap(),
+            Compression::BZIP2
+        );
+    }
+
+    #[test]
+    fn compression_from_config_name_ignores_case_and_spaces() {
+        assert_eq!(
+            Compression::from_config_name(" ZSTD ").unwrap(),
+            Compression::ZSTD
+        );
+    }
+
+    #[test]
+    fn compression_from_config_name_rejects_unknown_values() {
+        assert!(Compression::from_config_name("banana").is_err());
+        assert!(Compression::from_config_name("").is_err());
+        // Server-side variants are response codes, not something to configure.
+        assert!(Compression::from_config_name("server-zstd").is_err());
+    }
+
+    #[test]
+    fn encryption_from_config_name_accepts_supported_values() {
+        assert_eq!(
+            Encryption::from_config_name("none").unwrap(),
+            Encryption::NONE
+        );
+        assert_eq!(
+            Encryption::from_config_name("aes_256_gcm").unwrap(),
+            Encryption::AES_256_GCM
+        );
+        assert_eq!(
+            Encryption::from_config_name("aes_192_gcm").unwrap(),
+            Encryption::AES_192_GCM
+        );
+        assert_eq!(
+            Encryption::from_config_name("aes_128_gcm").unwrap(),
+            Encryption::AES_128_GCM
+        );
+    }
+
+    #[test]
+    fn encryption_from_config_name_accepts_dashes_and_any_case() {
+        assert_eq!(
+            Encryption::from_config_name("AES-256-GCM").unwrap(),
+            Encryption::AES_256_GCM
+        );
+    }
+
+    #[test]
+    fn encryption_from_config_name_rejects_unknown_values() {
+        assert!(Encryption::from_config_name("banana").is_err());
+        assert!(Encryption::from_config_name("").is_err());
+    }
 }

@@ -46,22 +46,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-#[cfg(test)]
-fn parse_encryption(encryption: &str) -> anyhow::Result<u8> {
-    match encryption.to_lowercase().as_str() {
-        "aes_256_gcm" | "aes" | "aes_256" => Ok(Encryption::AES_256_GCM),
-        "aes_192_gcm" | "aes_192" => Ok(Encryption::AES_192_GCM),
-        "aes_128_gcm" | "aes_128" => Ok(Encryption::AES_128_GCM),
-        // Explicitly allowed disabled encryption
-        "none" | "" | "off" => Ok(Encryption::NONE),
-        // Unrecognized values fail fast to prevent silent security regressions
-        unknown => Err(anyhow!(
-            "Unrecognized encryption mode: {}. Supported modes: none, aes_256_gcm, aes_192_gcm, aes_128_gcm.",
-            unknown
-        )),
-    }
-}
-
 /// Represents the header of a request sent to the pgmoneta server.
 ///
 /// Contains metadata such as the command code, client version,
@@ -166,8 +150,9 @@ impl PgmonetaClient {
 
     /// Constructs a standard request header for a given command.
     ///
-    /// The header includes the current local timestamp and always uses
-    /// ZSTD compression plus AES-256-GCM encryption, expecting a JSON response.
+    /// The header includes the current local timestamp and the compression and
+    /// encryption chosen in the `[pgmoneta]` configuration section, expecting a
+    /// JSON response.
     #[cfg(test)]
     fn build_request_header(command: u32) -> anyhow::Result<RequestHeader> {
         Self::build_request_header_with_async(command, false)
@@ -177,6 +162,9 @@ impl PgmonetaClient {
         command: u32,
         asynchronous: bool,
     ) -> anyhow::Result<RequestHeader> {
+        let config = CONFIG.get().expect("Configuration should be enabled");
+        let compression = Compression::from_config_name(&config.pgmoneta.compression)?;
+        let encryption = Encryption::from_config_name(&config.pgmoneta.encryption)?;
         let timestamp = Local::now().format("%Y%m%d%H%M%S").to_string();
 
         Ok(RequestHeader {
@@ -184,8 +172,8 @@ impl PgmonetaClient {
             client_version: CLIENT_VERSION.to_string(),
             output_format: Format::JSON,
             timestamp,
-            compression: Compression::ZSTD,
-            encryption: Encryption::AES_256_GCM,
+            compression,
+            encryption,
             asynchronous: asynchronous.then_some(true),
         })
     }
@@ -522,6 +510,7 @@ mod tests {
 
     #[test]
     fn test_async_header_serialization() {
+        init_test_config();
         let synchronous =
             PgmonetaClient::build_request_header_with_async(Command::BACKUP, false).unwrap();
         let asynchronous =
@@ -691,46 +680,5 @@ mod tests {
         let serialized2 = serde_json::to_string(&request2).unwrap();
 
         assert_eq!(serialized1, serialized2);
-    }
-
-    #[test]
-    fn parse_encryption_gcm_and_aliases() {
-        assert_eq!(
-            Encryption::AES_256_GCM,
-            parse_encryption("aes_256_gcm").unwrap()
-        );
-        assert_eq!(Encryption::AES_256_GCM, parse_encryption("aes").unwrap());
-        assert_eq!(
-            Encryption::AES_256_GCM,
-            parse_encryption("AES_256").unwrap()
-        );
-        assert_eq!(
-            Encryption::AES_192_GCM,
-            parse_encryption("aes_192_gcm").unwrap()
-        );
-        assert_eq!(
-            Encryption::AES_192_GCM,
-            parse_encryption("aes_192").unwrap()
-        );
-        assert_eq!(
-            Encryption::AES_128_GCM,
-            parse_encryption("aes_128_gcm").unwrap()
-        );
-        assert_eq!(
-            Encryption::AES_128_GCM,
-            parse_encryption("aes_128").unwrap()
-        );
-    }
-
-    #[test]
-    fn parse_encryption_none_variants() {
-        assert_eq!(Encryption::NONE, parse_encryption("none").unwrap());
-        assert_eq!(Encryption::NONE, parse_encryption("off").unwrap());
-        assert_eq!(Encryption::NONE, parse_encryption("").unwrap());
-    }
-
-    #[test]
-    fn parse_encryption_unknown_fails() {
-        assert!(parse_encryption("some_weird_mode").is_err());
     }
 }

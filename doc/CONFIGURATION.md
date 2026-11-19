@@ -38,6 +38,8 @@ allowed, do not expose the MCP port to untrusted networks.
 | host | | String | Yes | The address of pgmoneta instance |
 | port | | Int | Yes | The port of pgmoneta instance |
 | metrics | 5001 | Int | No | The port of the pgmoneta Prometheus metrics endpoint |
+| compression | zstd | String | No | Compression of the traffic to pgmoneta: `none`, `gzip`, `zstd`, `lz4` or `bzip2` |
+| encryption | aes_256_gcm | String | No | Encryption of the traffic to pgmoneta: `none`, `aes_256_gcm`, `aes_192_gcm` or `aes_128_gcm` |
 
 ## [llm]
 
