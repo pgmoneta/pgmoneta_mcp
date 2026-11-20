@@ -86,6 +86,10 @@ async fn main() -> anyhow::Result<()> {
         config.pgmoneta_mcp.log_rotation_age.as_str(),
     );
 
+    for warning in config.pgmoneta.deprecation_warnings() {
+        tracing::warn!("{warning}");
+    }
+
     let shutdown_token = CancellationToken::new();
     let handler = StreamableHttpService::new(
         || Ok(PgmonetaHandler::new()),

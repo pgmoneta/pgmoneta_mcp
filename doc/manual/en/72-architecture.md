@@ -57,14 +57,17 @@ The security module provides the following capabilities:
 
 **Configuration*
 
-Security settings are configured in the `[pgmoneta]` section of the configuration file:
+Requests from pgmoneta_mcp to pgmoneta always use `zstd` compression and `aes_256_gcm` encryption.
+This is not configurable. The tables above list the identifiers that can appear in message headers.
+
+The `compression` and `encryption` keys in the `[pgmoneta]` section are deprecated and ignored.
+They are still accepted so older configuration files load, and the server logs a warning when
+either one is set. Remove them from your configuration:
 
 ```ini
 [pgmoneta]
 host = localhost
 port = 5001
-compression = zstd
-encryption = aes_256_gcm
 ```
 
 **Data Protection*
@@ -76,7 +79,7 @@ encryption = aes_256_gcm
 
 **Request/Response Format*
 
-Each request includes a header specifying compression and encryption modes:
+Each request includes a header specifying compression and encryption modes (always `2` / `1` for requests sent by pgmoneta_mcp):
 
 ```json
 {

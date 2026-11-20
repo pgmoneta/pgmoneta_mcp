@@ -772,6 +772,9 @@ run_cargo_tests() {
     fi
 }
 
+# Note: these variables only change the test helper's own setup requests
+# (tests/common). PgmonetaClient, which info_test goes through, always uses
+# zstd + aes_256_gcm, so this matrix does not exercise other modes in the MCP client.
 run_info_test_matrix() {
     echo "Running full compression/encryption info_test matrix..."
     for comp in none gzip zstd lz4 bzip2; do

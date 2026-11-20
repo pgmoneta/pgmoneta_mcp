@@ -101,16 +101,32 @@ pub struct PgmonetaConfiguration {
     /// The port of the pgmoneta Prometheus metrics endpoint. Default: 5001.
     #[serde(default = "default_metrics_port")]
     pub metrics: i32,
-    /// Compression algorithm for MCP <-> pgmoneta communication.
-    /// Supported: "none", "gzip", "zstd", "lz4", "bzip2".
-    /// Default: "zstd".
-    #[serde(default = "default_compression")]
-    pub compression: String,
-    /// Encryption algorithm for MCP <-> pgmoneta communication.
-    /// Supported: "none", "aes_256_gcm", "aes_192_gcm", "aes_128_gcm".
-    /// Default: "aes_256_gcm".
-    #[serde(default = "default_encryption")]
-    pub encryption: String,
+    /// Deprecated and ignored. Requests to pgmoneta always use zstd.
+    /// Still accepted so existing configuration files keep loading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compression: Option<String>,
+    /// Deprecated and ignored. Requests to pgmoneta always use AES-256-GCM.
+    /// Still accepted so existing configuration files keep loading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encryption: Option<String>,
+}
+
+impl PgmonetaConfiguration {
+    /// Returns one warning per deprecated `[pgmoneta]` setting present in the file.
+    pub fn deprecation_warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if let Some(value) = &self.compression {
+            warnings.push(format!(
+                "[pgmoneta] compression = {value} is deprecated and ignored; requests to pgmoneta always use zstd"
+            ));
+        }
+        if let Some(value) = &self.encryption {
+            warnings.push(format!(
+                "[pgmoneta] encryption = {value} is deprecated and ignored; requests to pgmoneta always use aes_256_gcm"
+            ));
+        }
+        warnings
+    }
 }
 
 /// Configuration properties for the MCP server itself.
@@ -462,14 +478,6 @@ fn parse_client_llm_profiles(
         .collect()
 }
 
-pub fn default_compression() -> String {
-    "zstd".to_string()
-}
-
-pub fn default_encryption() -> String {
-    "aes_256_gcm".to_string()
-}
-
 pub fn default_metrics_port() -> i32 {
     5001
 }
@@ -646,6 +654,40 @@ mod tests {
         .unwrap();
 
         assert_eq!(conf.pgmoneta.metrics, 7001);
+    }
+
+    #[test]
+    fn test_load_configuration_deprecated_transport_settings() {
+        let mut user_file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            user_file,
+            "[pgmoneta-mcp-users]\nadmin = encrypted-password\n"
+        )
+        .unwrap();
+        let user_path = user_file.path().to_str().unwrap();
+
+        let mut config_file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            config_file,
+            "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\n"
+        )
+        .unwrap();
+        let conf = load_configuration(config_file.path().to_str().unwrap(), user_path).unwrap();
+        assert!(conf.pgmoneta.compression.is_none());
+        assert!(conf.pgmoneta.encryption.is_none());
+        assert!(conf.pgmoneta.deprecation_warnings().is_empty());
+
+        let mut config_file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            config_file,
+            "[pgmoneta_mcp]\nport = 8000\n\n[pgmoneta]\nhost = localhost\nport = 5000\ncompression = none\nencryption = none\n"
+        )
+        .unwrap();
+        let conf = load_configuration(config_file.path().to_str().unwrap(), user_path).unwrap();
+        let warnings = conf.pgmoneta.deprecation_warnings();
+        assert_eq!(warnings.len(), 2);
+        assert!(warnings[0].contains("compression = none"));
+        assert!(warnings[1].contains("encryption = none"));
     }
 
     #[test]
