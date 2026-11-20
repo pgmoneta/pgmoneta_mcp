@@ -316,27 +316,6 @@ async fn wait_for_pgmoneta(container: Option<&ContainerAsync<GenericImage>>) {
 pub fn init_config_for_pgmoneta(host: &str, port: i32) {
     let host = host.to_string();
     INIT_CONFIG.call_once(|| {
-        let force_plain = std::env::var("PGMONETA_MCP_FORCE_PLAIN")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-
-        let requested_compression =
-            std::env::var("PGMONETA_MCP_COMPRESSION").unwrap_or_else(|_| "zstd".to_string());
-        let requested_encryption =
-            std::env::var("PGMONETA_MCP_ENCRYPTION").unwrap_or_else(|_| "aes_256_gcm".to_string());
-
-        let compression = if force_plain {
-            "none".to_string()
-        } else {
-            requested_compression
-        };
-
-        let encryption = if force_plain {
-            "none".to_string()
-        } else {
-            requested_encryption
-        };
-
         let security: SecurityUtil = SecurityUtil::new();
         let (master_password, master_salt) =
             security.load_master_key().expect("master key must exist");
@@ -361,8 +340,8 @@ pub fn init_config_for_pgmoneta(host: &str, port: i32) {
                 host,
                 port,
                 metrics: 5001,
-                compression,
-                encryption,
+                compression: None,
+                encryption: None,
             },
             admins,
             llm: None,
@@ -496,8 +475,7 @@ where
         security.decrypt_from_base64_string(encrypted_password, &master_password, &master_salt)?;
     let password = String::from_utf8(decrypted_password)?;
 
-    let compression = parse_compression(&config.pgmoneta.compression)?;
-    let encryption = parse_encryption(&config.pgmoneta.encryption)?;
+    let (compression, encryption) = helper_transport()?;
     let header = RequestHeader {
         command,
         client_version: CLIENT_VERSION.to_string(),
@@ -519,6 +497,23 @@ where
     let request_json = serde_json::to_string(&request)?;
     write_request(&request_json, &mut stream, compression, encryption).await?;
     read_response(&mut stream).await
+}
+
+/// Compression and encryption for this helper's own setup requests (ping, backup, list).
+///
+/// Defaults match `PgmonetaClient`, which always sends ZSTD + AES-256-GCM.
+/// `PGMONETA_MCP_COMPRESSION` / `PGMONETA_MCP_ENCRYPTION` only change these helper
+/// requests (used by the `ci` matrix in `test/check.sh`); they never affect `PgmonetaClient`.
+fn helper_transport() -> anyhow::Result<(u8, u8)> {
+    let compression = match std::env::var("PGMONETA_MCP_COMPRESSION") {
+        Ok(value) => parse_compression(&value)?,
+        Err(_) => Compression::ZSTD,
+    };
+    let encryption = match std::env::var("PGMONETA_MCP_ENCRYPTION") {
+        Ok(value) => parse_encryption(&value)?,
+        Err(_) => Encryption::AES_256_GCM,
+    };
+    Ok((compression, encryption))
 }
 
 fn parse_compression(compression: &str) -> anyhow::Result<u8> {

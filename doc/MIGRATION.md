@@ -51,3 +51,8 @@ The encryption system has been upgraded to exclusively use **AES-GCM** (Galois/C
 
 > [!WARNING]
 > This is a breaking change. If your configuration continues to use legacy identifiers (`aes_256_cbc`, etc.), the MCP server will now return an explicit error and fail to connect. You MUST update your configuration to a supported GCM mode.
+
+> [!NOTE]
+> In later versions the `[pgmoneta]` `encryption` and `compression` keys are deprecated and ignored.
+> Requests to pgmoneta always use `aes_256_gcm` and `zstd`. The keys are still accepted, but the
+> server logs a warning when they are set, so remove them from `pgmoneta-mcp.conf`.
