@@ -62,12 +62,55 @@ pub struct JobRequest {
     pub job_id: String,
 }
 
+/// Operation whose async job status is requested.
+/// Serialized as the lowercase names pgmoneta expects.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum JobCommand {
+    #[default]
+    Backup,
+    Restore,
+    Archive,
+    Delete,
+}
+
+impl JobCommand {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Backup => "backup",
+            Self::Restore => "restore",
+            Self::Archive => "archive",
+            Self::Delete => "delete",
+        }
+    }
+}
+
+/// Async job state used to filter job listings.
+/// Serialized as the capitalized names pgmoneta expects.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize, schemars::JsonSchema)]
+pub enum JobState {
+    #[default]
+    Running,
+    Completed,
+    Failed,
+}
+
+impl JobState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Running => "Running",
+            Self::Completed => "Completed",
+            Self::Failed => "Failed",
+        }
+    }
+}
+
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
 pub struct JobStatusRequest {
     pub username: String,
     pub server: String,
-    /// One of: backup, restore, archive, delete.
-    pub command: String,
+    /// The operation to report on.
+    pub command: JobCommand,
 }
 
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
@@ -84,8 +127,8 @@ pub struct JobListByServerRequest {
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
 pub struct JobListByStateRequest {
     pub username: String,
-    /// One of: Running, Completed, Failed.
-    pub state: String,
+    /// The job state to filter by.
+    pub state: JobState,
 }
 
 #[derive(Debug, Default, serde::Deserialize, schemars::JsonSchema)]
@@ -120,8 +163,12 @@ job_tool!(
     Returns the running job when one exists, or the latest persisted job for that server and command. \
     The username has to be one of the pgmoneta admins to be able to access pgmoneta.",
     |request: JobStatusRequest| async move {
-        PgmonetaClient::request_job_status(&request.username, &request.server, &request.command)
-            .await
+        PgmonetaClient::request_job_status(
+            &request.username,
+            &request.server,
+            request.command.as_str(),
+        )
+        .await
     }
 );
 
@@ -159,7 +206,7 @@ job_tool!(
     Requires a state of Running, Completed, or Failed. \
     The username has to be one of the pgmoneta admins to be able to access pgmoneta.",
     |request: JobListByStateRequest| async move {
-        PgmonetaClient::request_job_list_status(&request.username, &request.state).await
+        PgmonetaClient::request_job_list_status(&request.username, request.state.as_str()).await
     }
 );
 
@@ -209,6 +256,76 @@ mod tests {
                 .unwrap()
                 .contains("Active jobs cannot be removed")
         );
+    }
+
+    /// Returns the `enum` values advertised for `field`, following a `$ref` into `$defs`.
+    fn enum_values(schema: &serde_json::Value, field: &str) -> Vec<String> {
+        let property = &schema["properties"][field];
+        let target = match property["$ref"].as_str() {
+            Some(reference) => {
+                let name = reference.rsplit('/').next().unwrap();
+                &schema["$defs"][name]
+            }
+            None => property,
+        };
+        target["enum"]
+            .as_array()
+            .unwrap_or_else(|| panic!("no enum for {field} in {schema}"))
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn test_job_status_command_schema_is_enum() {
+        let schema = serde_json::to_value(schemars::schema_for!(JobStatusRequest)).unwrap();
+        assert_eq!(
+            enum_values(&schema, "command"),
+            ["backup", "restore", "archive", "delete"]
+        );
+    }
+
+    #[test]
+    fn test_job_list_status_state_schema_is_enum() {
+        let schema = serde_json::to_value(schemars::schema_for!(JobListByStateRequest)).unwrap();
+        assert_eq!(
+            enum_values(&schema, "state"),
+            ["Running", "Completed", "Failed"]
+        );
+    }
+
+    #[test]
+    fn test_job_command_wire_values() {
+        for (input, expected) in [
+            ("backup", JobCommand::Backup),
+            ("restore", JobCommand::Restore),
+            ("archive", JobCommand::Archive),
+            ("delete", JobCommand::Delete),
+        ] {
+            let parsed: JobCommand = serde_json::from_value(serde_json::json!(input)).unwrap();
+            assert_eq!(parsed, expected);
+            assert_eq!(parsed.as_str(), input);
+        }
+        for bad in ["Backup", "backups", "BACKUP", "verify"] {
+            assert!(serde_json::from_value::<JobCommand>(serde_json::json!(bad)).is_err());
+        }
+    }
+
+    #[test]
+    fn test_job_state_wire_values() {
+        for (input, expected) in [
+            ("Running", JobState::Running),
+            ("Completed", JobState::Completed),
+            ("Failed", JobState::Failed),
+        ] {
+            let parsed: JobState = serde_json::from_value(serde_json::json!(input)).unwrap();
+            assert_eq!(parsed, expected);
+            assert_eq!(parsed.as_str(), input);
+        }
+        // "Starting" is a real job state but pgmoneta rejects it as a list filter.
+        for bad in ["running", "RUNNING", "Starting", "Done"] {
+            assert!(serde_json::from_value::<JobState>(serde_json::json!(bad)).is_err());
+        }
     }
 
     #[test]

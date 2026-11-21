@@ -16,8 +16,8 @@
 use pgmoneta_mcp::handler::PgmonetaHandler;
 use pgmoneta_mcp::handler::backup::{BackupRequest, BackupServerTool};
 use pgmoneta_mcp::handler::job::{
-    JobListAllRequest, JobListAllTool, JobListByServerRequest, JobListByStateRequest,
-    JobListServerTool, JobListStatusTool, JobRemoveRequest, JobRemoveTool, JobRequest,
+    JobCommand, JobListAllRequest, JobListAllTool, JobListByServerRequest, JobListByStateRequest,
+    JobListServerTool, JobListStatusTool, JobRemoveRequest, JobRemoveTool, JobRequest, JobState,
     JobStatusRequest, JobStatusTool, JobTool,
 };
 use pgmoneta_mcp::handler::restore::{RestoreRequest, RestoreTool};
@@ -127,7 +127,7 @@ async fn async_backup_job_lifecycle_test() {
             JobStatusRequest {
                 username: USERNAME.to_string(),
                 server: SERVER.to_string(),
-                command: "backup".to_string(),
+                command: JobCommand::Backup,
             },
         )
         .await
@@ -177,7 +177,7 @@ async fn async_backup_job_lifecycle_test() {
             &handler,
             JobListByStateRequest {
                 username: USERNAME.to_string(),
-                state: "Completed".to_string(),
+                state: JobState::Completed,
             },
         )
         .await
@@ -303,7 +303,7 @@ async fn async_restore_job_lifecycle_test() {
             JobStatusRequest {
                 username: USERNAME.to_string(),
                 server: SERVER.to_string(),
-                command: "restore".to_string(),
+                command: JobCommand::Restore,
             },
         )
         .await
