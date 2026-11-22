@@ -215,7 +215,7 @@ job when none is running.
 **Parameters**:
 - `username` (string, required): pgmoneta admin username
 - `server` (string, required): Server name as configured in pgmoneta
-- `command` (string, required): `backup`, `restore`, `archive`, or `delete`
+- `command` (string enum, required): exactly one of `backup`, `restore`, `archive`, `delete` (lowercase, case-sensitive)
 
 **job_list_all**
 
@@ -238,7 +238,7 @@ job when none is running.
 
 **Parameters**:
 - `username` (string, required): pgmoneta admin username
-- `state` (string, required): `Running`, `Completed`, or `Failed`
+- `state` (string enum, required): exactly one of `Running`, `Completed`, `Failed` (capitalized, case-sensitive)
 
 **job_remove**
 
