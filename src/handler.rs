@@ -30,14 +30,19 @@ pub mod restore;
 pub mod retention;
 pub mod shutdown;
 pub mod status;
+pub mod task;
 pub mod verify;
 
 use super::constant::*;
 use super::constant::{Command, Compression, Encryption};
+use crate::client::PgmonetaClient;
 use crate::utils::Utility;
 use rmcp::{
-    ErrorData as McpError, RoleServer, ServerHandler, handler::server::router::tool::ToolRouter,
-    model::*, service::RequestContext, tool_handler,
+    ErrorData as McpError, RoleServer, ServerHandler,
+    handler::server::{router::tool::ToolRouter, tool::ToolCallContext},
+    model::*,
+    service::RequestContext,
+    tool_handler,
 };
 use serde_json::Map;
 use serde_json::Value;
@@ -78,13 +83,37 @@ pub(crate) fn optional_text(value: Option<&str>) -> Option<&str> {
 ///
 /// This struct routes MCP tool calls from the client (like an AI model)
 /// to the appropriate internal functions that communicate with pgmoneta.
-#[derive(Clone)]
-pub struct PgmonetaHandler;
+///
+/// One handler is created per MCP session, so the tasks it holds belong to
+/// that session only.
+#[derive(Clone, Default)]
+pub struct PgmonetaHandler {
+    tasks: task::JobTasks,
+}
 
 impl PgmonetaHandler {
     /// Creates a new instance of the `PgmonetaHandler` with an initialized tool router.
     pub fn new() -> Self {
-        Self
+        Self::default()
+    }
+
+    /// Turns the result of an async job tool into a task, if pgmoneta returned a job ID.
+    fn task_response(&self, response: CallToolResponse, username: &str) -> CallToolResponse {
+        let CallToolResponse::Complete(result) = &response else {
+            return response;
+        };
+        if result.is_error == Some(true) {
+            return response;
+        }
+        let job_id = task::result_text(result)
+            .and_then(|text| serde_json::from_str::<Value>(text).ok())
+            .and_then(|value| task::find_string(&value, "JobId").map(str::to_string));
+        match job_id {
+            Some(job_id) => CallToolResponse::Task(CreateTaskResult::new(
+                self.tasks.register(&job_id, username),
+            )),
+            None => response,
+        }
     }
 
     /// Builds the tool router by registering each tool via the trait-based API.
@@ -287,12 +316,6 @@ impl PgmonetaHandler {
     }
 }
 
-impl Default for PgmonetaHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[tool_handler]
 impl ServerHandler for PgmonetaHandler {
     /// Provides the MCP initialization capabilities and metadata for this server.
@@ -300,7 +323,12 @@ impl ServerHandler for PgmonetaHandler {
         let pkg_name = env!("CARGO_PKG_NAME");
         let pkg_version = env!("CARGO_PKG_VERSION");
 
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+        ServerConfig::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_tasks()
+                .build(),
+        )
             .with_server_info(Implementation::new(pkg_name, pkg_version))
             .with_instructions("This server provides capabilities to interact with pgmoneta, a backup/restore tool for PostgreSQL.")
     }
@@ -317,6 +345,69 @@ impl ServerHandler for PgmonetaHandler {
             tracing::debug!(?initialize_headers, %initialize_uri, "initialize from http server");
         }
         Ok(self.get_info())
+    }
+
+    /// Routes tool calls. When the client supports MCP Tasks, `backup`,
+    /// `restore`, `archive` and `delete` run as pgmoneta async jobs and
+    /// return a task backed by the job ID.
+    async fn call_tool(
+        &self,
+        mut request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResponse, McpError> {
+        let as_task = task::is_task_tool(&request.name)
+            && context
+                .client_capabilities()
+                .is_some_and(|caps| caps.supports_tasks());
+        let username = if as_task {
+            let arguments = request.arguments.get_or_insert_with(JsonObject::new);
+            arguments.insert("async".to_string(), Value::Bool(true));
+            arguments
+                .get("username")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        } else {
+            None
+        };
+
+        let response = Self::tool_router()
+            .call(ToolCallContext::new(self, request, context))
+            .await?;
+        Ok(match username {
+            Some(username) => self.task_response(response, &username),
+            None => response,
+        })
+    }
+
+    /// `tasks/get`: reads the pgmoneta job behind the task with `JOB GET`.
+    async fn get_task(
+        &self,
+        request: GetTaskParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<GetTaskResult, McpError> {
+        let (username, created_at) = self.tasks.lookup(&request.task_id)?;
+        let response = PgmonetaClient::request_job(&username, &request.task_id)
+            .await
+            .map_err(|e| McpError::internal_error(format!("Job request failed: {e:?}"), None))?;
+        let job = Self::generate_call_tool_result_string(&response)?;
+        Ok(GetTaskResult::new(task::detailed_task(
+            &request.task_id,
+            &created_at,
+            &job,
+        )))
+    }
+
+    /// `tasks/cancel`: pgmoneta cannot cancel a running job yet.
+    async fn cancel_task(
+        &self,
+        request: CancelTaskParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<(), McpError> {
+        self.tasks.lookup(&request.task_id)?;
+        Err(McpError::invalid_request(
+            "pgmoneta does not support cancelling jobs yet",
+            None,
+        ))
     }
 }
 
@@ -551,5 +642,58 @@ mod tests {
         assert_eq!(optional_text(Some("null")), None);
         assert_eq!(optional_text(Some(" NULL ")), None);
         assert_eq!(optional_text(Some("\n")), None);
+    }
+
+    fn complete(text: &str) -> CallToolResponse {
+        CallToolResponse::Complete(CallToolResult::success(vec![ContentBlock::text(text)]))
+    }
+
+    #[test]
+    fn test_get_info_declares_tasks() {
+        assert!(
+            PgmonetaHandler::new()
+                .get_info()
+                .capabilities
+                .supports_tasks()
+        );
+    }
+
+    #[test]
+    fn test_job_ack_becomes_task() {
+        let handler = PgmonetaHandler::new();
+        let ack = r#"{"Outcome":{"Status":true},"Response":{"JobId":"primary-backup-1"}}"#;
+        let CallToolResponse::Task(created) = handler.task_response(complete(ack), "admin") else {
+            panic!("expected a task response");
+        };
+        assert_eq!(created.result_type, ResultType::TASK);
+        assert_eq!(created.task.task_id, "primary-backup-1");
+        assert_eq!(created.task.status, TaskStatus::Working);
+
+        let (username, _) = handler.tasks.lookup("primary-backup-1").unwrap();
+        assert_eq!(username, "admin");
+    }
+
+    #[test]
+    fn test_response_without_job_id_is_kept() {
+        let handler = PgmonetaHandler::new();
+        let response = r#"{"Outcome":{"Status":false,"Error":"Backup is active"}}"#;
+        assert!(matches!(
+            handler.task_response(complete(response), "admin"),
+            CallToolResponse::Complete(_)
+        ));
+        assert!(handler.tasks.lookup("Backup is active").is_err());
+    }
+
+    #[test]
+    fn test_error_result_is_kept() {
+        let handler = PgmonetaHandler::new();
+        let error = CallToolResponse::Complete(CallToolResult::error(vec![ContentBlock::text(
+            r#"{"JobId":"j1"}"#,
+        )]));
+        assert!(matches!(
+            handler.task_response(error, "admin"),
+            CallToolResponse::Complete(_)
+        ));
+        assert!(handler.tasks.lookup("j1").is_err());
     }
 }

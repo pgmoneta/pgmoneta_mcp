@@ -78,3 +78,19 @@ does not delete the backup or other output produced by the operation.
 
 The MCP client normally injects the authenticated `username` automatically. API
 clients calling these tools directly must include it.
+
+## MCP Tasks
+
+pgmoneta-mcp supports the MCP Tasks extension (`io.modelcontextprotocol/tasks`).
+When the MCP client declares it, `backup`, `restore`, `archive`, and `delete`
+always run as async jobs and answer the tool call with a task. The task ID is
+the pgmoneta job identifier.
+
+* `tasks/get` reads the job with `JOB GET`. A running job is `working`, with its
+  state and any progress (percentage, done and total, remaining) in the status
+  message. A finished job is `completed` and carries the final tool result; a
+  failed job sets `isError` on that result.
+* `tasks/cancel` is rejected, because pgmoneta cannot cancel a running job yet.
+
+A task can only be read in the MCP session that created it. Clients without
+Tasks support keep the behavior described above and use the `job` tools.
