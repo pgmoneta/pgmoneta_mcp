@@ -15,12 +15,14 @@
 
 pub mod annotate;
 pub mod archive;
+pub mod azure;
 pub mod backup;
 pub mod clear;
 pub mod compression;
 pub mod conf;
 pub mod delete;
 pub mod encryption;
+pub mod gcs;
 pub mod info;
 pub mod job;
 pub mod metrics;
@@ -106,6 +108,8 @@ impl PgmonetaHandler {
             .with_async_tool::<metrics::MetricTool>()
             .with_async_tool::<retention::RetainBackupTool>()
             .with_async_tool::<restore::RestoreTool>()
+            .with_async_tool::<azure::AzureRestoreTool>()
+            .with_async_tool::<gcs::GcsRestoreTool>()
             .with_async_tool::<retention::ExpungeBackupTool>()
             .with_async_tool::<shutdown::ShutdownTool>()
             .with_async_tool::<conf::ConfReloadTool>()

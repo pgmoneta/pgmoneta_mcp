@@ -15,12 +15,14 @@
 
 mod annotate;
 mod archive;
+mod azure;
 mod backup;
 mod clear;
 mod compression;
 mod conf;
 mod delete;
 mod encryption;
+mod gcs;
 mod info;
 mod job;
 mod metrics;

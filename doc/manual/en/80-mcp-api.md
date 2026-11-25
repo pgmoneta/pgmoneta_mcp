@@ -559,6 +559,50 @@ pgmoneta_retention_server{server="standby"} 14
 }
 ```
 
+**azure_restore**
+**Description**: Restores a backup stored in Azure Blob Storage to a specified directory. Runs synchronously; `async` is not supported.
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `server` (string, required): Server name as configured in pgmoneta
+- `label` (string, required): Label of the backup in Azure Blob Storage
+- `directory` (string, required): Target directory for restore
+- `current`, `name`, `xid`, `time`, `lsn`, `inclusive`, `timeline`, `action`, `primary`, `replica` (optional): Restore position, same as for `restore`. Defaults to `current`.
+
+**Example**:
+```json
+{
+  "tool": "azure_restore",
+  "arguments": {
+    "username": "admin",
+    "server": "primary",
+    "label": "20260718173645",
+    "directory": "/tmp/restore"
+  }
+}
+```
+
+**gcs_restore**
+**Description**: Restores a backup stored in Google Cloud Storage to a specified directory. Runs synchronously; `async` is not supported.
+**Parameters**:
+- `username` (string, required): pgmoneta admin username
+- `server` (string, required): Server name as configured in pgmoneta
+- `label` (string, required): Label of the backup in Google Cloud Storage
+- `directory` (string, required): Target directory for restore
+- `current`, `name`, `xid`, `time`, `lsn`, `inclusive`, `timeline`, `action`, `primary`, `replica` (optional): Restore position, same as for `restore`. Defaults to `current`.
+
+**Example**:
+```json
+{
+  "tool": "gcs_restore",
+  "arguments": {
+    "username": "admin",
+    "server": "primary",
+    "label": "20260718173645",
+    "directory": "/tmp/restore"
+  }
+}
+```
+
 **archive (Similar to restore, but for archiving backups)**
 **Description**: Archives a backup to a specified directory.
 **Parameters**:

@@ -98,6 +98,8 @@ impl Command {
     pub const MODE: u32 = 24;
     /// Command to query, list, and remove async jobs.
     pub const JOB: u32 = 26;
+    pub const AZURE_RESTORE: u32 = 202;
+    pub const GCS_RESTORE: u32 = 203;
 
     /// Translates a numeric management command code into its string representation.
     ///
@@ -133,6 +135,8 @@ impl Command {
             Self::CONF_SET => Ok("conf set"),
             Self::MODE => Ok("mode"),
             Self::JOB => Ok("job"),
+            Self::AZURE_RESTORE => Ok("azure restore"),
+            Self::GCS_RESTORE => Ok("gcs restore"),
             default => Err(anyhow!("Unrecognized command enum: {default}")),
         }
     }
@@ -435,6 +439,30 @@ impl ManagementError {
     pub const MANAGEMENT_ERROR_JOB_ACTION_INVALID: u32 = 3209;
     pub const MANAGEMENT_ERROR_JOB_REQUEST_INVALID: u32 = 3210;
 
+    // Same codes as MANAGEMENT_ERROR_JOB_NOSERVER..=NOFORK in pgmoneta
+    pub const MANAGEMENT_ERROR_RESTORE_AZURE_NOSERVER: u32 = 3200;
+    pub const MANAGEMENT_ERROR_RESTORE_AZURE_NOFORK: u32 = 3201;
+    pub const MANAGEMENT_ERROR_RESTORE_AZURE_DOWNLOAD: u32 = 3202;
+    pub const MANAGEMENT_ERROR_RESTORE_AZURE_NETWORK: u32 = 3203;
+    pub const MANAGEMENT_ERROR_RESTORE_AZURE_ERROR: u32 = 3204;
+
+    pub const MANAGEMENT_ERROR_RESTORE_GCS_NOSERVER: u32 = 3300;
+    pub const MANAGEMENT_ERROR_RESTORE_GCS_NOFORK: u32 = 3301;
+    pub const MANAGEMENT_ERROR_RESTORE_GCS_DOWNLOAD: u32 = 3302;
+    pub const MANAGEMENT_ERROR_RESTORE_GCS_NETWORK: u32 = 3303;
+    pub const MANAGEMENT_ERROR_RESTORE_GCS_ERROR: u32 = 3304;
+
+    pub fn translate_azure_restore_error(error: u32) -> Option<&'static str> {
+        match error {
+            Self::MANAGEMENT_ERROR_RESTORE_AZURE_NOSERVER => Some("Azure restore: no server"),
+            Self::MANAGEMENT_ERROR_RESTORE_AZURE_NOFORK => Some("Azure restore: no fork"),
+            Self::MANAGEMENT_ERROR_RESTORE_AZURE_DOWNLOAD => Some("Azure restore: download failed"),
+            Self::MANAGEMENT_ERROR_RESTORE_AZURE_NETWORK => Some("Azure restore: network error"),
+            Self::MANAGEMENT_ERROR_RESTORE_AZURE_ERROR => Some("Azure restore: error"),
+            _ => None,
+        }
+    }
+
     /// Translates a numeric management error code into a human-readable string.
     ///
     /// # Arguments
@@ -648,6 +676,12 @@ impl ManagementError {
             Self::MANAGEMENT_ERROR_JOB_ERROR => "Job: error",
             Self::MANAGEMENT_ERROR_JOB_ACTION_INVALID => "Job: invalid action",
             Self::MANAGEMENT_ERROR_JOB_REQUEST_INVALID => "Job: invalid request",
+
+            Self::MANAGEMENT_ERROR_RESTORE_GCS_NOSERVER => "GCS restore: no server",
+            Self::MANAGEMENT_ERROR_RESTORE_GCS_NOFORK => "GCS restore: no fork",
+            Self::MANAGEMENT_ERROR_RESTORE_GCS_DOWNLOAD => "GCS restore: download failed",
+            Self::MANAGEMENT_ERROR_RESTORE_GCS_NETWORK => "GCS restore: network error",
+            Self::MANAGEMENT_ERROR_RESTORE_GCS_ERROR => "GCS restore: error",
 
             _ => "Unknown error",
         }

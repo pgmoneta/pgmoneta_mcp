@@ -144,6 +144,58 @@ restore {"server":"primary","backup_id":"latest","directory":"/tmp/restore","rep
 }
 ```
 
+**Azure Restore**
+
+**Tool: /azure_restore**
+
+Restore a backup stored in Azure Blob Storage into a directory. Position defaults to `current` when omitted.
+
+**Arguments**
+
+- `server`: The pgmoneta server name.
+- `label`: Label of the backup in Azure Blob Storage.
+- `directory`: Target restore directory.
+- Optional position controls: `current`, `name`, `xid`, `time`, `lsn`, `inclusive`, `timeline`, `action`, `primary`, `replica`.
+
+**Behavior**
+
+- Position controls work the same way as for `restore`.
+- The restore runs synchronously. pgmoneta does not support `async` for Azure restores.
+- The server must have Azure storage configured in pgmoneta.
+
+**Examples**
+
+```text
+azure_restore {"server":"primary","label":"20260718173645","directory":"/tmp/restore"}
+azure_restore {"server":"primary","label":"20260718173645","directory":"/tmp/restore","primary":true}
+```
+
+**GCS Restore**
+
+**Tool: /gcs_restore**
+
+Restore a backup stored in Google Cloud Storage into a directory. Position defaults to `current` when omitted.
+
+**Arguments**
+
+- `server`: The pgmoneta server name.
+- `label`: Label of the backup in Google Cloud Storage.
+- `directory`: Target restore directory.
+- Optional position controls: `current`, `name`, `xid`, `time`, `lsn`, `inclusive`, `timeline`, `action`, `primary`, `replica`.
+
+**Behavior**
+
+- Position controls work the same way as for `restore`.
+- The restore runs synchronously. pgmoneta does not support `async` for GCS restores.
+- The server must have GCS storage configured in pgmoneta.
+
+**Examples**
+
+```text
+gcs_restore {"server":"primary","label":"20260718173645","directory":"/tmp/restore"}
+gcs_restore {"server":"primary","label":"20260718173645","directory":"/tmp/restore","replica":true}
+```
+
 **List Backups**
 
 **Tool: /list_backups**
