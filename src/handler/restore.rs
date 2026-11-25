@@ -130,33 +130,32 @@ impl AsyncTool<PgmonetaHandler> for RestoreTool {
 }
 
 fn normalize_position(req: &RestoreRequest) -> String {
+    build_position(
+        [req.current, req.primary, req.replica],
+        [
+            ("name", req.name.as_deref()),
+            ("xid", req.xid.as_deref()),
+            ("time", req.time.as_deref()),
+            ("lsn", req.lsn.as_deref()),
+            ("inclusive", req.inclusive.as_deref()),
+            ("timeline", req.timeline.as_deref()),
+            ("action", req.action.as_deref()),
+        ],
+    )
+}
+
+pub(crate) fn build_position(
+    flags: [Option<bool>; 3],
+    fields: [(&str, Option<&str>); 7],
+) -> String {
     let mut result = Vec::new();
-    if let Some(current) = req.current
-        && current
-    {
-        result.push("current".to_string());
+    for (flag, name) in flags.into_iter().zip(["current", "primary", "replica"]) {
+        if flag == Some(true) {
+            result.push(name.to_string());
+        }
     }
-    if let Some(primary) = req.primary
-        && primary
-    {
-        result.push("primary".to_string());
-    }
-    if let Some(replica) = req.replica
-        && replica
-    {
-        result.push("replica".to_string());
-    }
-    let fields = [
-        ("name", &req.name),
-        ("xid", &req.xid),
-        ("time", &req.time),
-        ("lsn", &req.lsn),
-        ("inclusive", &req.inclusive),
-        ("timeline", &req.timeline),
-        ("action", &req.action),
-    ];
     for (key, value) in fields {
-        if let Some(value) = optional_text(value.as_deref()) {
+        if let Some(value) = optional_text(value) {
             result.push(format!("{key}={value}"));
         }
     }
