@@ -71,6 +71,10 @@ max_tool_rounds = 10
 The `[llm]` section is optional. Omit it if you do not use server-side local LLM
 integration.
 
+The server refuses to start if the file contains an unknown section or key,
+for example a misspelled `metric = 5001`. All ports must be between 1 and
+65535.
+
 ## Section: `[pgmoneta_mcp]`
 
 This section configures the MCP server process.
@@ -139,7 +143,8 @@ server.
 | `metrics` | `5001` | Int | No | The port of the pgmoneta Prometheus metrics endpoint |
 
 The management `port` must match pgmoneta's `management` setting. The `metrics`
-port is separate and should match pgmoneta's Prometheus metrics endpoint.
+port is separate and should match pgmoneta's Prometheus metrics endpoint. The
+two must be different.
 
 ## Section: `[llm]`
 

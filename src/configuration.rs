@@ -76,6 +76,7 @@ pub fn get_users_mut(conf: &mut UserConf) -> Option<&mut HashMap<String, String>
 /// aggregates the `[pgmoneta_mcp]` and `[pgmoneta]` sections from the
 /// configuration file, along with the parsed admin users.
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Configuration {
     /// The overall properties of the MCP server.
     #[serde(alias = "pgmoneta-mcp")]
@@ -93,6 +94,7 @@ pub struct Configuration {
 ///
 /// This corresponds to the `[pgmoneta]` section in the configuration file.
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PgmonetaConfiguration {
     /// The address of the pgmoneta instance (Required).
     pub host: String,
@@ -118,6 +120,7 @@ pub struct PgmonetaConfiguration {
 /// This corresponds to the `[pgmoneta_mcp]` section in the configuration file,
 /// where you configure the overall properties of the MCP server.
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PgmonetaMcpConfiguration {
     /// The port the MCP server starts on. Default: 8000.
     #[serde(default = "default_port")]
@@ -156,6 +159,7 @@ pub struct PgmonetaMcpConfiguration {
 /// This corresponds to the optional `[llm]` section in the configuration file,
 /// where you configure the connection to a local LLM inference server.
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct LlmConfiguration {
     /// The endpoint URL for the LLM server. Required when `[llm]` is present.
     pub endpoint: String,
@@ -369,11 +373,30 @@ pub fn default_llm_max_tool_rounds() -> usize {
 }
 
 fn normalize_configuration(mut conf: Configuration) -> anyhow::Result<Configuration> {
+    validate_port("[pgmoneta_mcp] port", conf.pgmoneta_mcp.port)?;
+    validate_port("[pgmoneta] port", conf.pgmoneta.port)?;
+    validate_port("[pgmoneta] metrics", conf.pgmoneta.metrics)?;
+
+    if conf.pgmoneta.port == conf.pgmoneta.metrics {
+        bail!(
+            "[pgmoneta] port and metrics must be different, both are {}",
+            conf.pgmoneta.port
+        );
+    }
+
     if let Some(llm) = conf.llm.as_mut() {
         normalize_llm_configuration(llm)?;
     }
 
     Ok(conf)
+}
+
+fn validate_port(name: &str, port: i32) -> anyhow::Result<()> {
+    if !(1..=i32::from(u16::MAX)).contains(&port) {
+        bail!("{name} must be between 1 and {}, got {port}", u16::MAX);
+    }
+
+    Ok(())
 }
 
 fn normalize_client_configuration(
@@ -646,6 +669,191 @@ mod tests {
         .unwrap();
 
         assert_eq!(conf.pgmoneta.metrics, 7001);
+    }
+
+    fn load_test_configuration(content: &str) -> anyhow::Result<Configuration> {
+        let mut config_file = tempfile::NamedTempFile::new().unwrap();
+        let mut user_file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(config_file, "{content}").unwrap();
+        writeln!(
+            user_file,
+            "[pgmoneta-mcp-users]
+admin = encrypted-password
+"
+        )
+        .unwrap();
+
+        load_configuration(
+            config_file.path().to_str().unwrap(),
+            user_file.path().to_str().unwrap(),
+        )
+    }
+
+    fn assert_configuration_error(content: &str, expected: &str) {
+        let err = load_test_configuration(content).unwrap_err();
+        let message = format!("{err:#}");
+        assert!(
+            message.contains(expected),
+            "expected error containing '{expected}', got: {message}"
+        );
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_unknown_key_in_pgmoneta() {
+        assert_configuration_error(
+            "[pgmoneta_mcp]
+port = 8000
+
+[pgmoneta]
+host = localhost
+port = 5000
+metric = 5001
+",
+            "metric",
+        );
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_unknown_key_in_pgmoneta_mcp() {
+        assert_configuration_error(
+            "[pgmoneta_mcp]
+port = 8000
+log_levle = debug
+
+[pgmoneta]
+host = localhost
+port = 5000
+",
+            "log_levle",
+        );
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_unknown_key_in_llm() {
+        assert_configuration_error(
+            "[pgmoneta_mcp]
+port = 8000
+
+[pgmoneta]
+host = localhost
+port = 5000
+
+[llm]
+endpoint = http://localhost:8100/v1
+model = gemma
+max_tool_round = 3
+",
+            "max_tool_round",
+        );
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_unknown_section() {
+        assert_configuration_error(
+            "[pgmoneta_mcp]
+port = 8000
+
+[pgmoneta]
+host = localhost
+port = 5000
+
+[pgmonetaa]
+host = localhost
+",
+            "pgmonetaa",
+        );
+    }
+
+    #[test]
+    fn test_load_configuration_accepts_hyphenated_section_alias() {
+        let conf = load_test_configuration(
+            "[pgmoneta-mcp]
+port = 8100
+
+[pgmoneta]
+host = localhost
+port = 5000
+",
+        )
+        .unwrap();
+
+        assert_eq!(conf.pgmoneta_mcp.port, 8100);
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_out_of_range_ports() {
+        for value in ["0", "-1", "65536", "70000"] {
+            assert_configuration_error(
+                &format!(
+                    "[pgmoneta_mcp]
+port = {value}
+
+[pgmoneta]
+host = localhost
+port = 5000
+"
+                ),
+                "[pgmoneta_mcp] port must be between 1 and 65535",
+            );
+            assert_configuration_error(
+                &format!(
+                    "[pgmoneta_mcp]
+port = 8000
+
+[pgmoneta]
+host = localhost
+port = {value}
+"
+                ),
+                "[pgmoneta] port must be between 1 and 65535",
+            );
+            assert_configuration_error(
+                &format!(
+                    "[pgmoneta_mcp]
+port = 8000
+
+[pgmoneta]
+host = localhost
+port = 5000
+metrics = {value}
+"
+                ),
+                "[pgmoneta] metrics must be between 1 and 65535",
+            );
+        }
+    }
+
+    #[test]
+    fn test_load_configuration_accepts_port_bounds() {
+        let conf = load_test_configuration(
+            "[pgmoneta_mcp]
+port = 1
+
+[pgmoneta]
+host = localhost
+port = 65535
+metrics = 1
+",
+        )
+        .unwrap();
+
+        assert_eq!(conf.pgmoneta_mcp.port, 1);
+        assert_eq!(conf.pgmoneta.port, 65535);
+        assert_eq!(conf.pgmoneta.metrics, 1);
+    }
+
+    #[test]
+    fn test_load_configuration_rejects_port_equal_to_metrics() {
+        assert_configuration_error(
+            "[pgmoneta_mcp]
+port = 8000
+
+[pgmoneta]
+host = localhost
+port = 5001
+",
+            "[pgmoneta] port and metrics must be different, both are 5001",
+        );
     }
 
     #[test]
